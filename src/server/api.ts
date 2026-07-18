@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { streamSSE } from "hono/streaming";
-import { configPath } from "../config.js";
+import {
+  type Config,
+  configPath,
+  overseerrSchema,
+  radarrSchema,
+  sonarrSchema,
+} from "../config.js";
 import { type LogEntry, log, logBuffer, logEvents } from "../logger.js";
 import { plexHeaders, PLEX_TV } from "../plex/client.js";
 import { isConfiguredToken } from "../plex/token-discovery.js";
@@ -9,11 +15,26 @@ import { OverseerrSink } from "../sinks/overseerr.js";
 import { configUpdateSchema, updateConfigFile } from "./config-write.js";
 import type { SyncManager } from "./manager.js";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";
+
+const SINK_SCHEMAS = {
+  overseerr: overseerrSchema,
+  radarr: radarrSchema,
+  sonarr: sonarrSchema,
+} as const;
+type SinkName = keyof typeof SINK_SCHEMAS;
+
+function isExcluded(config: Config, user: { title: string; admin: boolean }): boolean {
+  return (
+    config.plex.excludeUsers.includes(user.title) || (user.admin && !config.sync.includeOwner)
+  );
+}
 
 export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono {
-  const { config, store, sinks } = manager;
-  const overseerr = sinks.find((s): s is OverseerrSink => s instanceof OverseerrSink);
+  const { config, store } = manager;
+  // Resolved per call: rebuildSinks() replaces the instances.
+  const overseerr = () =>
+    manager.sinks.find((s): s is OverseerrSink => s instanceof OverseerrSink);
   const app = new Hono();
 
   app.get("/api/status", (c) => {
@@ -32,7 +53,7 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
         guests: users.filter((u) => u.guest).length,
         errors: users.filter((u) => u.error).length,
       },
-      sinks: sinks.map((s) => ({ name: s.name })),
+      sinks: manager.sinks.map((s) => ({ name: s.name })),
       lastCycle: last
         ? {
             startedAt: last.startedAt,
@@ -50,13 +71,17 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
 
   app.get("/api/users", async (c) => {
     const users = manager.lastReport?.users ?? [];
+    const sink = overseerr();
     const enriched = [];
     for (const u of users) {
       enriched.push({
         ...u,
+        // Live view: the report's excluded flag is a snapshot from the last
+        // cycle and would lag behind toggles made in the UI.
+        excluded: isExcluded(config, u),
         tokenCached: u.admin ? "owner" : store.getToken(u.plexId) ? "cached" : "none",
-        overseerrUserId: overseerr
-          ? ((await overseerr.resolveRequester({ plexId: u.plexId, title: u.title })) ?? null)
+        overseerrUserId: sink
+          ? ((await sink.resolveRequester({ plexId: u.plexId, title: u.title })) ?? null)
           : null,
       });
     }
@@ -106,9 +131,25 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
       },
       sync: config.sync,
       sinks: {
-        overseerr: config.sinks.overseerr ? { url: config.sinks.overseerr.url } : null,
-        radarr: config.sinks.radarr ? { url: config.sinks.radarr.url } : null,
-        sonarr: config.sinks.sonarr ? { url: config.sinks.sonarr.url } : null,
+        overseerr: config.sinks.overseerr
+          ? { url: config.sinks.overseerr.url, apiKeySet: true }
+          : null,
+        radarr: config.sinks.radarr
+          ? {
+              url: config.sinks.radarr.url,
+              apiKeySet: true,
+              qualityProfileId: config.sinks.radarr.qualityProfileId,
+              rootFolderPath: config.sinks.radarr.rootFolderPath,
+            }
+          : null,
+        sonarr: config.sinks.sonarr
+          ? {
+              url: config.sinks.sonarr.url,
+              apiKeySet: true,
+              qualityProfileId: config.sinks.sonarr.qualityProfileId,
+              rootFolderPath: config.sinks.sonarr.rootFolderPath,
+            }
+          : null,
       },
     }),
   );
@@ -119,6 +160,26 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
       return c.json({ error: parsed.error.issues[0]?.message ?? "invalid config" }, 400);
     }
     const update = parsed.data;
+
+    // Sinks: merge the incoming fields over the existing config and make sure
+    // the result is a complete, valid sink before anything is written.
+    const validatedSinks: Partial<Record<SinkName, unknown>> = {};
+    for (const [name, fields] of Object.entries(update.sinks ?? {}) as [
+      SinkName,
+      Record<string, unknown> | undefined,
+    ][]) {
+      if (!fields || Object.keys(fields).length === 0) continue;
+      const merged = { ...(config.sinks[name] ?? {}), ...fields };
+      const result = SINK_SCHEMAS[name].safeParse(merged);
+      if (!result.success) {
+        const issue = result.error.issues[0];
+        return c.json(
+          { error: `${name}: ${issue?.path.join(".") ?? ""} ${issue?.message ?? "invalid"}` },
+          400,
+        );
+      }
+      validatedSinks[name] = result.data;
+    }
 
     updateConfigFile(configPath(), update);
 
@@ -133,6 +194,10 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
     }
     if (update.plex?.excludeUsers !== undefined) {
       config.plex.excludeUsers = update.plex.excludeUsers;
+    }
+    if (Object.keys(validatedSinks).length > 0) {
+      Object.assign(config.sinks, validatedSinks);
+      manager.rebuildSinks();
     }
 
     log.info("configuration updated from the web UI");
@@ -150,16 +215,45 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
     }
   });
 
-  app.post("/api/test/overseerr", async (c) => {
-    if (!config.sinks.overseerr) return c.json({ ok: false, detail: "not configured" });
+  // Test a sink with candidate credentials from the UI (before saving), or
+  // with the stored ones when the body omits them. Radarr/Sonarr replies
+  // include quality profiles and root folders to populate the UI dropdowns.
+  app.post("/api/test/:sink", async (c) => {
+    const name = c.req.param("sink") as SinkName;
+    if (!(name in SINK_SCHEMAS)) return c.json({ ok: false, detail: "unknown sink" }, 404);
+
+    const body = (await c.req.json().catch(() => ({}))) as { url?: string; apiKey?: string };
+    const stored = config.sinks[name];
+    const url = (body.url || stored?.url)?.replace(/\/+$/, "");
+    const apiKey = body.apiKey || stored?.apiKey;
+    if (!url || !apiKey) return c.json({ ok: false, detail: "url and API key required" });
+
     try {
-      const res = await fetch(`${config.sinks.overseerr.url}/api/v1/status`, {
-        headers: { "X-Api-Key": config.sinks.overseerr.apiKey },
+      if (name === "overseerr") {
+        const res = await fetch(`${url}/api/v1/status`, { headers: { "X-Api-Key": apiKey } });
+        if (!res.ok) return c.json({ ok: false, detail: `HTTP ${res.status}` });
+        const { version } = (await res.json()) as { version: string };
+        return c.json({ ok: true, detail: `Overseerr v${version}` });
+      }
+
+      const headers = { "X-Api-Key": apiKey };
+      const status = await fetch(`${url}/api/v3/system/status`, { headers });
+      if (!status.ok) return c.json({ ok: false, detail: `HTTP ${status.status}` });
+      const { version } = (await status.json()) as { version: string };
+      const [profiles, folders] = await Promise.all([
+        fetch(`${url}/api/v3/qualityprofile`, { headers }).then(
+          (r) => r.json() as Promise<{ id: number; name: string }[]>,
+        ),
+        fetch(`${url}/api/v3/rootfolder`, { headers }).then(
+          (r) => r.json() as Promise<{ path: string }[]>,
+        ),
+      ]);
+      return c.json({
+        ok: true,
+        detail: `${name === "radarr" ? "Radarr" : "Sonarr"} v${version}`,
+        qualityProfiles: profiles.map((p) => ({ id: p.id, name: p.name })),
+        rootFolders: folders.map((f) => f.path),
       });
-      const detail = res.ok
-        ? `Overseerr v${((await res.json()) as { version: string }).version}`
-        : `HTTP ${res.status}`;
-      return c.json({ ok: res.ok, detail });
     } catch (err) {
       return c.json({ ok: false, detail: (err as Error).message });
     }

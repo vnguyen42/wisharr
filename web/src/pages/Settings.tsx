@@ -1,16 +1,12 @@
 import { useState } from "react";
 import { api, usePolling } from "../api";
 import { Card, Chip, Switch } from "../components";
+import { SinkCard } from "./SinkCard";
 import type { ApiConfig } from "../types";
-
-interface TestResult {
-  ok: boolean;
-  detail: string;
-}
 
 export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) => void }) {
   const { data: config, refetch } = usePolling<ApiConfig>("/api/config", 60_000);
-  const [tests, setTests] = useState<Record<string, TestResult>>({});
+  const [plexTest, setPlexTest] = useState<{ ok: boolean; detail: string } | null>(null);
   const [interval, setIntervalValue] = useState<string | null>(null);
 
   async function save(update: object, message: string) {
@@ -23,12 +19,11 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
     }
   }
 
-  async function runTest(target: "plex" | "overseerr") {
+  async function runPlexTest() {
     try {
-      const result = await api<TestResult>(`/api/test/${target}`, { method: "POST" });
-      setTests((t) => ({ ...t, [target]: result }));
+      setPlexTest(await api("/api/test/plex", { method: "POST" }));
     } catch (err) {
-      setTests((t) => ({ ...t, [target]: { ok: false, detail: (err as Error).message } }));
+      setPlexTest({ ok: false, detail: (err as Error).message });
     }
   }
 
@@ -52,12 +47,10 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
             aria-label="Plex admin token"
           />
           <Chip tone="accent">{config.plex.tokenSource}</Chip>
-          <button className="btn" onClick={() => void runTest("plex")}>
+          <button className="btn" onClick={() => void runPlexTest()}>
             Test
           </button>
-          {tests.plex && (
-            <Chip tone={tests.plex.ok ? "ok" : "err"}>{tests.plex.detail}</Chip>
-          )}
+          {plexTest && <Chip tone={plexTest.ok ? "ok" : "err"}>{plexTest.detail}</Chip>}
         </div>
         <div className="form-row">
           <div className="form-label">
@@ -134,35 +127,13 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
 
       <Card title="Sinks">
         {(["overseerr", "radarr", "sonarr"] as const).map((name) => (
-          <div className="form-row" key={name}>
-            <div className="form-label">
-              <div className="name">{name.charAt(0).toUpperCase() + name.slice(1)}</div>
-              <div className="hint">
-                {name === "overseerr" ? "Requests with per-user attribution" : "Direct adds"}
-              </div>
-            </div>
-            {config.sinks[name] ? (
-              <>
-                <input
-                  className="input input-grow"
-                  type="text"
-                  value={config.sinks[name]!.url}
-                  readOnly
-                  aria-label={`${name} URL`}
-                />
-                {name === "overseerr" && (
-                  <button className="btn" onClick={() => void runTest("overseerr")}>
-                    Test
-                  </button>
-                )}
-                {name === "overseerr" && tests.overseerr && (
-                  <Chip tone={tests.overseerr.ok ? "ok" : "err"}>{tests.overseerr.detail}</Chip>
-                )}
-              </>
-            ) : (
-              <Chip tone="muted">not configured — edit config.yml</Chip>
-            )}
-          </div>
+          <SinkCard
+            key={name}
+            name={name}
+            config={config.sinks[name]}
+            onSaved={refetch}
+            onToast={onToast}
+          />
         ))}
       </Card>
     </>

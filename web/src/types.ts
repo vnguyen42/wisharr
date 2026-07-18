@@ -51,6 +51,13 @@ export interface LogEntry {
   msg: string;
 }
 
+export interface SinkConfig {
+  url: string;
+  apiKeySet: boolean;
+  qualityProfileId?: number;
+  rootFolderPath?: string;
+}
+
 export interface ApiConfig {
   plex: {
     tokenSource: "config" | "auto-detected";
@@ -59,8 +66,15 @@ export interface ApiConfig {
   };
   sync: { intervalMinutes: number; includeOwner: boolean; seedOnFirstRun: boolean };
   sinks: {
-    overseerr: { url: string } | null;
-    radarr: { url: string } | null;
-    sonarr: { url: string } | null;
+    overseerr: SinkConfig | null;
+    radarr: SinkConfig | null;
+    sonarr: SinkConfig | null;
   };
+}
+
+export interface SinkTestResult {
+  ok: boolean;
+  detail: string;
+  qualityProfiles?: { id: number; name: string }[];
+  rootFolders?: string[];
 }

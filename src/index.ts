@@ -5,14 +5,12 @@ import { resolvePlexToken } from "./plex/token-discovery.js";
 import { buildApi } from "./server/api.js";
 import { SyncManager } from "./server/manager.js";
 import { Store } from "./store.js";
-import { buildSinks } from "./sync.js";
 
 const config = loadConfig();
 const rawConfiguredToken = config.plex.token;
 config.plex.token = await resolvePlexToken(config.plex.token);
 const store = new Store(config.database);
-const sinks = buildSinks(config);
-const manager = new SyncManager(config, store, sinks);
+const manager = new SyncManager(config, store);
 
 if (process.argv.includes("--seed")) {
   log.info("seeding: marking current watchlist items as synced, nothing will be pushed");
@@ -23,7 +21,7 @@ if (process.argv.includes("--seed")) {
   store.close();
 } else {
   log.info(
-    `wisharr started — syncing every ${config.sync.intervalMinutes} min to: ${sinks.map((s) => s.name).join(", ")}`,
+    `wisharr started — syncing every ${config.sync.intervalMinutes} min to: ${manager.sinks.map((s) => s.name).join(", ")}`,
   );
   manager.schedule();
 

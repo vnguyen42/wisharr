@@ -3,20 +3,27 @@ import type { Config } from "../config.js";
 import { log } from "../logger.js";
 import type { Sink } from "../sinks/sink.js";
 import type { Store } from "../store.js";
-import { type CycleReport, runSync } from "../sync.js";
+import { buildSinks, type CycleReport, runSync } from "../sync.js";
 
 /** Owns the sync loop and its observable state, for both the CLI and the web UI. */
 export class SyncManager {
   running = false;
   lastReport: CycleReport | null = null;
   readonly startedAt = new Date().toISOString();
+  sinks: Sink[];
   private cron: Cron | null = null;
 
   constructor(
     readonly config: Config,
     readonly store: Store,
-    readonly sinks: Sink[],
-  ) {}
+  ) {
+    this.sinks = buildSinks(config);
+  }
+
+  /** Recreate sink instances after a config change from the web UI. */
+  rebuildSinks(): void {
+    this.sinks = buildSinks(this.config);
+  }
 
   /** (Re)arm the recurring schedule from the current config. */
   schedule(): void {

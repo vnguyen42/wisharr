@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { z } from "zod";
 
-const radarrSchema = z.object({
+export const radarrSchema = z.object({
   url: z.string().url(),
   apiKey: z.string().min(1),
   qualityProfileId: z.number().int().positive(),
@@ -12,7 +12,7 @@ const radarrSchema = z.object({
   minimumAvailability: z.enum(["announced", "inCinemas", "released"]).default("released"),
 });
 
-const sonarrSchema = z.object({
+export const sonarrSchema = z.object({
   url: z.string().url(),
   apiKey: z.string().min(1),
   qualityProfileId: z.number().int().positive(),
@@ -22,7 +22,7 @@ const sonarrSchema = z.object({
   seasonFolder: z.boolean().default(true),
 });
 
-const overseerrSchema = z.object({
+export const overseerrSchema = z.object({
   url: z.string().url(),
   apiKey: z.string().min(1),
 });
