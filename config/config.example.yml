@@ -1,0 +1,46 @@
+# Wisharr configuration.
+# Copy to config/config.yml — ${VAR} references are replaced with environment variables.
+
+plex:
+  # Your admin account token — the ONLY secret Wisharr ever needs.
+  # Managed-user tokens are minted on the fly from this one, every sync cycle.
+  # How to find it: https://support.plex.tv/articles/204059436
+  token: ${PLEX_TOKEN}
+
+  # PINs for protected Home profiles (profile title -> PIN). Omit if none.
+  pins: {}
+  #  Kids: "1234"
+
+  # Home profiles to ignore.
+  excludeUsers: []
+
+sync:
+  intervalMinutes: 20
+  includeOwner: true
+
+# Configure at least one sink. Overseerr/Jellyseerr is the recommended one:
+# it handles quality profiles, approvals and both movies & shows by itself.
+sinks:
+  overseerr:
+    url: http://localhost:5055
+    apiKey: ${OVERSEERR_API_KEY}
+
+  # radarr:
+  #   url: http://localhost:7878
+  #   apiKey: ${RADARR_API_KEY}
+  #   qualityProfileId: 1
+  #   rootFolderPath: /movies
+  #   monitor: true
+  #   searchOnAdd: true
+  #   minimumAvailability: released
+
+  # sonarr:
+  #   url: http://localhost:8989
+  #   apiKey: ${SONARR_API_KEY}
+  #   qualityProfileId: 1
+  #   rootFolderPath: /tv
+  #   monitor: true
+  #   searchOnAdd: true
+  #   seasonFolder: true
+
+database: data/wisharr.db
