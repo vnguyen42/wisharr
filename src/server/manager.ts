@@ -1,4 +1,3 @@
-import { Cron } from "croner";
 import type { Config } from "../config.js";
 import { log } from "../logger.js";
 import { ensureRssFeeds, fetchRssFingerprints } from "../plex/rss.js";
@@ -12,7 +11,8 @@ export class SyncManager {
   lastReport: CycleReport | null = null;
   readonly startedAt = new Date().toISOString();
   sinks: Sink[];
-  private cron: Cron | null = null;
+  private timer: NodeJS.Timeout | null = null;
+  private nextAt: number | null = null;
 
   constructor(
     readonly config: Config,
@@ -29,6 +29,7 @@ export class SyncManager {
   rssState: "off" | "active" | "unavailable" = "off";
   private rssTimer: NodeJS.Timeout | null = null;
   private rssSeen = new Map<string, Set<string>>();
+  private rssPending = false;
 
   /**
    * Poll the Plex Pass watchlist RSS feeds between cron cycles. The feeds
@@ -69,9 +70,15 @@ export class SyncManager {
           log.debug(`RSS poll failed (${feed.feedType}): ${(err as Error).message}`);
         }
       }
-      if (trigger && !this.running) {
-        log.info("RSS: new watchlist activity detected, starting a sync cycle");
-        void this.runCycle();
+      if (trigger) {
+        if (this.running) {
+          // Don't drop the event: the running cycle may have started before
+          // this item appeared — re-run as soon as it finishes.
+          this.rssPending = true;
+        } else {
+          log.info("RSS: new watchlist activity detected, starting a sync cycle");
+          void this.runCycle();
+        }
       }
     };
 
@@ -79,16 +86,23 @@ export class SyncManager {
     this.rssTimer = setInterval(() => void poll(), this.config.sync.rssIntervalSeconds * 1000);
   }
 
-  /** (Re)arm the recurring schedule from the current config. */
+  /**
+   * (Re)arm the recurring schedule from the current config. A plain interval,
+   * not a cron pattern: `*​/90 * * * *` would mean "minutes divisible by 90"
+   * (i.e. hourly), silently breaking any interval above 59.
+   */
   schedule(): void {
-    this.cron?.stop();
-    this.cron = new Cron(`*/${this.config.sync.intervalMinutes} * * * *`, () => {
+    if (this.timer) clearInterval(this.timer);
+    const ms = this.config.sync.intervalMinutes * 60_000;
+    this.nextAt = Date.now() + ms;
+    this.timer = setInterval(() => {
+      this.nextAt = Date.now() + ms;
       void this.runCycle();
-    });
+    }, ms);
   }
 
   nextRunAt(): string | null {
-    return this.cron?.nextRun()?.toISOString() ?? null;
+    return this.nextAt ? new Date(this.nextAt).toISOString() : null;
   }
 
   /** Run one cycle now; returns false if one was already in flight. */
@@ -105,11 +119,16 @@ export class SyncManager {
     } finally {
       this.running = false;
     }
+    if (this.rssPending) {
+      this.rssPending = false;
+      log.info("RSS: activity arrived during the last cycle, running another");
+      setTimeout(() => void this.runCycle(), 1_000);
+    }
     return true;
   }
 
   stop(): void {
-    this.cron?.stop();
+    if (this.timer) clearInterval(this.timer);
     if (this.rssTimer) clearInterval(this.rssTimer);
   }
 }

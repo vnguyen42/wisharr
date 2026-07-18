@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, usePolling } from "../api";
 import { Card, Chip, Switch } from "../components";
 import { SinkCard } from "./SinkCard";
@@ -10,8 +10,12 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
   const [interval, setIntervalValue] = useState<string | null>(null);
 
   const configuredInterval = config?.sync.intervalMinutes;
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function commitInterval(raw: string) {
+    // An explicit commit (Enter/blur) cancels the pending debounce so the
+    // same value is never PUT twice.
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
     const minutes = Number(raw);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) return;
     if (minutes === configuredInterval) return;
@@ -22,8 +26,10 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
   // input, so waiting for onBlur alone silently dropped those edits.
   useEffect(() => {
     if (interval === null) return;
-    const timer = setTimeout(() => commitInterval(interval), 800);
-    return () => clearTimeout(timer);
+    debounceTimer.current = setTimeout(() => commitInterval(interval), 800);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
   }, [interval]);
 
   // Drop the local draft once the server confirms the new value.

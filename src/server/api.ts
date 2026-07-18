@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { basicAuth } from "hono/basic-auth";
+import { z } from "zod";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { streamSSE } from "hono/streaming";
 import {
@@ -16,7 +17,7 @@ import { OverseerrSink } from "../sinks/overseerr.js";
 import { configUpdateSchema, updateConfigFile } from "./config-write.js";
 import type { SyncManager } from "./manager.js";
 
-export const VERSION = "0.5.0";
+export const VERSION = "0.5.1";
 
 const SINK_SCHEMAS = {
   overseerr: overseerrSchema,
@@ -40,6 +41,27 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
 
   // Unauthenticated on purpose: Docker healthchecks and reverse-proxy probes.
   app.get("/api/health", (c) => c.json({ ok: true, version: VERSION }));
+
+  // CSRF guard: browsers attach an Origin header to every cross-origin
+  // request (even "simple" text/plain POSTs that skip preflight) — reject
+  // state-changing requests whose Origin doesn't match the request host.
+  app.use("*", async (c, next) => {
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+      const origin = c.req.header("origin");
+      if (origin) {
+        let originHost: string | null = null;
+        try {
+          originHost = new URL(origin).host;
+        } catch {
+          /* malformed origin → reject below */
+        }
+        if (originHost !== c.req.header("host")) {
+          return c.json({ error: "cross-origin request rejected" }, 403);
+        }
+      }
+    }
+    await next();
+  });
 
   if (config.ui.auth) {
     app.use("*", basicAuth(config.ui.auth));
@@ -226,6 +248,24 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
     return c.json({ ok: true });
   });
 
+  // Atomic per-user toggle: the UI sends a delta instead of the whole list,
+  // so two quick toggles can't overwrite each other with stale state.
+  app.put("/api/users/exclusion", async (c) => {
+    const parsed = z
+      .object({ title: z.string().min(1), excluded: z.boolean() })
+      .safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: "title and excluded required" }, 400);
+
+    const set = new Set(config.plex.excludeUsers);
+    if (parsed.data.excluded) set.add(parsed.data.title);
+    else set.delete(parsed.data.title);
+    const excludeUsers = [...set];
+
+    updateConfigFile(configPath(), { plex: { excludeUsers } });
+    config.plex.excludeUsers = excludeUsers;
+    return c.json({ excludeUsers });
+  });
+
   app.post("/api/test/plex", async (c) => {
     try {
       const res = await fetch(`${PLEX_TV}/api/v2/ping`, {
@@ -247,8 +287,20 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
     const body = (await c.req.json().catch(() => ({}))) as { url?: string; apiKey?: string };
     const stored = config.sinks[name];
     const url = (body.url || stored?.url)?.replace(/\/+$/, "");
-    const apiKey = body.apiKey || stored?.apiKey;
-    if (!url || !apiKey) return c.json({ ok: false, detail: "url and API key required" });
+    if (!url) return c.json({ ok: false, detail: "url and API key required" });
+
+    // The stored key is only ever sent to the origin it was configured for —
+    // testing any other URL requires the caller to supply a key explicitly,
+    // so this endpoint can't be used to exfiltrate saved credentials.
+    let apiKey = body.apiKey;
+    if (!apiKey && stored) {
+      try {
+        if (new URL(url).origin === new URL(stored.url).origin) apiKey = stored.apiKey;
+      } catch {
+        /* unparseable url → no stored key */
+      }
+    }
+    if (!apiKey) return c.json({ ok: false, detail: "url and API key required" });
 
     try {
       if (name === "overseerr") {

@@ -71,6 +71,8 @@ ui:
     password: ${WISHARR_PASSWORD}
 ```
 
+Two more notes for anything beyond a trusted LAN: bind the port locally (`127.0.0.1:9797`) or put a reverse proxy with auth in front — the API holds your Plex admin token and sink API keys. And treat the `data/` volume (backups included) as sensitive: it caches live plex.tv tokens for your Home profiles.
+
 One caveat for self-hosters: keep a single Wisharr process per database file. In particular, don't run a host-side `npm run sync` against the same `data/` a Docker container is using — SQLite locking is not reliable across the Docker Desktop file-sharing boundary.
 
 ## Configuration

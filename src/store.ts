@@ -61,9 +61,13 @@ export class Store {
     this.db.prepare("DELETE FROM synced WHERE user_title = ? AND guid = ?").run(user, guid);
   }
 
-  /** True if any user (any sink) still references this item. */
-  guidStillTracked(guid: string): boolean {
-    return this.db.prepare("SELECT 1 FROM synced WHERE guid = ? LIMIT 1").get(guid) !== undefined;
+  /** True if a user other than `excludeUser` still references this item. */
+  guidTrackedByOthers(guid: string, excludeUser: string): boolean {
+    return (
+      this.db
+        .prepare("SELECT 1 FROM synced WHERE guid = ? AND user_title != ? LIMIT 1")
+        .get(guid, excludeUser) !== undefined
+    );
   }
 
   /** Rows written before the column existed are assumed to be seeds. */

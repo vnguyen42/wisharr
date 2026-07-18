@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, usePolling } from "./api";
 import { Dashboard } from "./pages/Dashboard";
 import { Logs } from "./pages/Logs";
@@ -57,23 +57,30 @@ function useCountdown(nextRunAt: string | null): { label: string; seconds: numbe
 
 export function App() {
   const [page, setPage] = useState<Page>("dashboard");
-  const { data: status, refetch } = usePolling<Status>("/api/status", 10_000);
+  const { data: status, error: statusError, refetch } = usePolling<Status>("/api/status", 10_000);
   const { label: countdown, seconds } = useCountdown(status?.nextRunAt ?? null);
   const [toast, setToast] = useState<{ msg: string; err: boolean } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // When the backend is unreachable, `status` freezes at its last value —
+  // without this flag the countdown would sit at 00:00 pretending a sync is
+  // running forever.
+  const offline = statusError !== null;
 
   // A cycle lasts a few seconds — far less than the 10 s polling interval.
   // When the countdown hits zero, show the syncing state and poll fast until
   // the server hands back the next schedule.
-  const syncing = Boolean(status?.running) || seconds === 0;
+  const syncing = !offline && (Boolean(status?.running) || seconds === 0);
   useEffect(() => {
-    if (seconds !== 0) return;
+    if (seconds !== 0 || offline) return;
     const fast = setInterval(refetch, 2000);
     return () => clearInterval(fast);
-  }, [seconds === 0]);
+  }, [seconds === 0, offline]);
 
   function showToast(msg: string, err = false) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, err });
-    setTimeout(() => setToast(null), 2800);
+    toastTimer.current = setTimeout(() => setToast(null), 2800);
   }
 
   async function syncNow() {
@@ -81,8 +88,9 @@ export function App() {
       await api("/api/sync", { method: "POST" });
       showToast(`Sync started — watching ${status?.plex.profiles ?? "all"} profiles`);
       setTimeout(refetch, 1500);
-    } catch {
-      showToast("A sync is already running", true);
+    } catch (err) {
+      const message = (err as Error).message;
+      showToast(message.includes("409") ? "A sync is already running" : `Sync failed: ${message}`, true);
     }
   }
 
@@ -113,7 +121,11 @@ export function App() {
           >
             {icons[p]}
             {TITLES[p]}
-            {p === "users" && <span className="count">{status?.plex.profiles ?? ""}</span>}
+            {p === "users" && (
+              <span className="count">
+                {status ? status.plex.profiles + status.plex.friends : ""}
+              </span>
+            )}
           </button>
         ))}
 
@@ -140,9 +152,19 @@ export function App() {
           <h1 className="page-title">{TITLES[page]}</h1>
           <div className="spacer" />
           <span className="next-sync">
-            {syncing ? <b>sync running…</b> : <>next sync in <b>{countdown}</b></>}
+            {offline ? (
+              <span className="chip chip-err">backend unreachable</span>
+            ) : syncing ? (
+              <b>sync running…</b>
+            ) : (
+              <>next sync in <b>{countdown}</b></>
+            )}
           </span>
-          <button className="btn btn-primary" onClick={() => void syncNow()} disabled={syncing}>
+          <button
+            className="btn btn-primary"
+            onClick={() => void syncNow()}
+            disabled={syncing || offline}
+          >
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
               <path d="M11 6.5a4.5 4.5 0 1 1-1.4-3.3M11 1v2.5H8.5" />
             </svg>

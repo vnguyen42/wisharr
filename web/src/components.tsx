@@ -69,7 +69,13 @@ export function Switch({
 }
 
 export function timeAgo(iso: string): string {
-  const thenMs = iso.endsWith("Z") || iso.includes("+") ? Date.parse(iso) : Date.parse(iso + "Z");
+  // SQLite timestamps arrive as "YYYY-MM-DD HH:MM:SS" (UTC, no zone marker);
+  // normalize to strict ISO — WebKit refuses the space-separated form.
+  const normalized = iso.replace(" ", "T");
+  const thenMs =
+    normalized.endsWith("Z") || normalized.includes("+")
+      ? Date.parse(normalized)
+      : Date.parse(normalized + "Z");
   const seconds = Math.max(0, Math.round((Date.now() - thenMs) / 1000));
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;

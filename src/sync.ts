@@ -182,9 +182,17 @@ export async function runSync(
             plexId: userReport.plexId ?? undefined,
             title: userReport.title,
           });
-          if (result !== "skipped") {
-            store.markSynced(userReport.title, item.guid, sink.name, item.title);
-          }
+          // Only "added" means Wisharr owns the entry. "already-present"
+          // (someone requested it by hand) and "skipped" (the sink can never
+          // take this item) are recorded as absorbed so removal sync will
+          // never touch them and they aren't retried every cycle.
+          store.markSynced(
+            userReport.title,
+            item.guid,
+            sink.name,
+            item.title,
+            result !== "added",
+          );
           if (result === "added") {
             userReport.added.push({ title: item.title, sink: sink.name });
             log.info(`${sink.name}: added "${item.title}" (from ${userReport.title})`);
@@ -233,9 +241,10 @@ export async function runSync(
   if (config.sync.friends) {
     try {
       // Home members can also appear as friends, under their account
-      // username rather than their profile title — match on both.
+      // username. Match on usernames only: matching titles too would silently
+      // drop a real friend whose username happens to equal a profile title.
       const homeNames = new Set(
-        users.flatMap((u) => [u.title.toLowerCase(), u.username.toLowerCase()]).filter(Boolean),
+        users.map((u) => u.username.toLowerCase()).filter(Boolean),
       );
       const friends = (await listFriends(config.plex.token)).filter(
         (f) => !homeNames.has(f.username.toLowerCase()),
@@ -284,7 +293,7 @@ export async function runSync(
  * Only runs over watchlists fetched successfully this cycle, so a transient
  * fetch failure can never masquerade as a mass removal.
  */
-async function removalPass(
+export async function removalPass(
   config: Config,
   store: Store,
   sinks: Sink[],
@@ -302,15 +311,22 @@ async function removalPass(
     }
 
     for (const [guid, rows] of byGuid) {
-      store.deleteSynced(userTitle, guid);
       log.info(`"${rows[0]!.title}" left ${userTitle}'s watchlist`);
-      if (store.guidStillTracked(guid)) continue; // still on someone else's list
 
       const pushedSinks = new Set(rows.filter((r) => !r.seeded).map((r) => r.sink));
-      if (pushedSinks.size === 0) continue; // Wisharr never added it anywhere
+      const stillWanted = store.guidTrackedByOthers(guid, userTitle);
+      if (stillWanted || pushedSinks.size === 0) {
+        // Someone else still has it, or Wisharr never added it — just forget
+        // this user's rows so a future re-add pushes again.
+        store.deleteSynced(userTitle, guid);
+        continue;
+      }
 
       const [, type, ratingKey] = guid.match(/^plex:\/\/(movie|show)\/(.+)$/) ?? [];
-      if (!type || !ratingKey) continue;
+      if (!type || !ratingKey) {
+        store.deleteSynced(userTitle, guid);
+        continue;
+      }
       let item: WatchlistItem = {
         guid,
         ratingKey,
@@ -323,6 +339,9 @@ async function removalPass(
         log.warn(`removal: cannot resolve IDs for "${item.title}": ${(err as Error).message}`);
       }
 
+      // Rows are only deleted once every sink removal succeeded — a sink that
+      // is briefly down keeps its rows and the removal is retried next cycle.
+      let allSucceeded = true;
       for (const sink of sinks) {
         if (!pushedSinks.has(sink.name) || !sink.remove) continue;
         try {
@@ -332,9 +351,11 @@ async function removalPass(
             log.info(`${sink.name}: removed "${item.title}" (no watchlist references it anymore)`);
           }
         } catch (err) {
+          allSucceeded = false;
           log.error(`removal failed in ${sink.name} for "${item.title}": ${(err as Error).message}`);
         }
       }
+      if (allSucceeded) store.deleteSynced(userTitle, guid);
     }
   }
 }

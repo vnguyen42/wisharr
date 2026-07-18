@@ -5,23 +5,20 @@ import type { ApiConfig, ApiUser } from "../types";
 
 export function Users({ onToast }: { onToast: (msg: string, err?: boolean) => void }) {
   const { data: users, refetch } = usePolling<ApiUser[]>("/api/users", 15_000);
-  const { data: config, refetch: refetchConfig } = usePolling<ApiConfig>("/api/config", 60_000);
+  const { data: config } = usePolling<ApiConfig>("/api/config", 60_000);
   const [saving, setSaving] = useState(false);
 
   async function toggleUser(user: ApiUser, sync: boolean) {
-    if (!config) return;
-    const current = new Set(config.plex.excludeUsers);
-    if (sync) current.delete(user.title);
-    else current.add(user.title);
     setSaving(true);
     try {
-      await api("/api/config", {
+      // Delta endpoint: the server flips one name atomically, so two quick
+      // toggles can never overwrite each other with a stale full list.
+      await api("/api/users/exclusion", {
         method: "PUT",
-        body: JSON.stringify({ plex: { excludeUsers: [...current] } }),
+        body: JSON.stringify({ title: user.title, excluded: !sync }),
       });
       onToast(sync ? `${user.title} will sync again` : `${user.title} excluded from sync`);
       refetch();
-      refetchConfig();
     } catch (err) {
       onToast(`Save failed: ${(err as Error).message}`, true);
     } finally {
@@ -50,7 +47,7 @@ export function Users({ onToast }: { onToast: (msg: string, err?: boolean) => vo
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.plexId}>
+                <tr key={u.title}>
                   <td className="cell-main">
                     {u.title}
                     {u.protected && (
@@ -75,7 +72,9 @@ export function Users({ onToast }: { onToast: (msg: string, err?: boolean) => vo
                   </td>
                   <td>{u.error ? <Chip tone="err">error</Chip> : (u.items ?? "—")}</td>
                   <td>
-                    {u.overseerrUserId !== null ? (
+                    {!config?.sinks.overseerr ? (
+                      <span className="cell-muted">—</span>
+                    ) : u.overseerrUserId !== null ? (
                       <>
                         {u.title} <span className="cell-muted">#{u.overseerrUserId}</span>
                       </>

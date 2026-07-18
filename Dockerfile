@@ -23,5 +23,5 @@ COPY config/config.example.yml ./config/config.example.yml
 VOLUME ["/app/config", "/app/data"]
 EXPOSE 9797
 HEALTHCHECK --interval=60s --timeout=5s --start-period=30s \
-  CMD node -e "fetch('http://localhost:9797/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["node", "dist/healthcheck.js"]
 CMD ["node", "dist/index.js"]

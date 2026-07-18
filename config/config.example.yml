@@ -43,7 +43,9 @@ sync:
 # it handles quality profiles, approvals and both movies & shows by itself.
 sinks:
   overseerr:
-    url: http://localhost:5055
+    # From Docker, "localhost" is the Wisharr container itself — use your
+    # Overseerr container's service name (same network) or host.docker.internal.
+    url: http://overseerr:5055
     apiKey: ${OVERSEERR_API_KEY}
 
   # radarr:
