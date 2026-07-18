@@ -41,6 +41,17 @@ docker compose -f docker-compose.example.yml up -d
 
 **Request attribution** — Overseerr requests are credited to the right person: Wisharr matches each Plex Home profile against Overseerr's user list (by Plex account id first, display name as fallback), so quotas, permissions and request history apply per user. Plex users with no Overseerr account — managed users typically, or friends never imported — fall back to the API key owner, with a one-time log line naming them.
 
+## Web UI
+
+Wisharr ships a built-in web UI on port **9797** (set `ui.port`, or `ui.enabled: false` to turn it off):
+
+- **Dashboard** — sink health, tracked items, request counts, recent activity, next-sync countdown and a Sync-now button.
+- **Users** — every Plex Home profile with its type, watchlist size, Overseerr account mapping, token state, and a per-profile sync toggle.
+- **Logs** — live log tail over SSE with level filters.
+- **Settings** — sync interval and behavior toggles (saved back to `config.yml`, comments preserved), plus connection tests for Plex and Overseerr.
+
+The UI has no authentication — keep it on your LAN or behind a reverse proxy with auth.
+
 ## Configuration
 
 See [`config/config.example.yml`](config/config.example.yml). `${VAR}` references in the YAML are expanded from environment variables so secrets can stay out of the file.

@@ -32,6 +32,18 @@ export class Store {
         minted_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
+    this.migrate();
+  }
+
+  /** Rows written before the column existed are assumed to be seeds. */
+  private migrate(): void {
+    const cols = this.db.prepare("SELECT name FROM pragma_table_info('synced')").all() as {
+      name: string;
+    }[];
+    if (!cols.some((c) => c.name === "seeded")) {
+      this.db.exec("ALTER TABLE synced ADD COLUMN seeded INTEGER NOT NULL DEFAULT 0");
+      this.db.exec("UPDATE synced SET seeded = 1");
+    }
   }
 
   getToken(userId: number): string | undefined {
@@ -68,12 +80,55 @@ export class Store {
     );
   }
 
-  markSynced(user: string, guid: string, sink: string, title: string): void {
+  markSynced(user: string, guid: string, sink: string, title: string, seeded = false): void {
     this.db
       .prepare(
-        "INSERT OR IGNORE INTO synced (user_title, guid, sink, title) VALUES (?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO synced (user_title, guid, sink, title, seeded) VALUES (?, ?, ?, ?, ?)",
       )
-      .run(user, guid, sink, title);
+      .run(user, guid, sink, title, seeded ? 1 : 0);
+  }
+
+  trackedItemCount(): number {
+    const row = this.db
+      .prepare("SELECT COUNT(DISTINCT user_title || '|' || guid) c FROM synced")
+      .get() as { c: number };
+    return row.c;
+  }
+
+  requestCountSince(days: number): number {
+    const row = this.db
+      .prepare(
+        "SELECT COUNT(*) c FROM synced WHERE seeded = 0 AND synced_at > datetime('now', ?)",
+      )
+      .get(`-${days} days`) as { c: number };
+    return row.c;
+  }
+
+  recentActivity(limit = 50): {
+    user: string;
+    title: string;
+    sink: string;
+    seeded: boolean;
+    at: string;
+  }[] {
+    const rows = this.db
+      .prepare(
+        "SELECT user_title, title, sink, seeded, synced_at FROM synced ORDER BY synced_at DESC, rowid DESC LIMIT ?",
+      )
+      .all(limit) as {
+      user_title: string;
+      title: string;
+      sink: string;
+      seeded: number;
+      synced_at: string;
+    }[];
+    return rows.map((r) => ({
+      user: r.user_title,
+      title: r.title,
+      sink: r.sink,
+      seeded: r.seeded === 1,
+      at: r.synced_at,
+    }));
   }
 
   close(): void {

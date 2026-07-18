@@ -6,7 +6,10 @@ export interface HomeUser {
   uuid: string;
   title: string;
   admin: boolean;
+  /** Managed user: no standalone plex.tv account. */
   restricted: boolean;
+  /** Full account invited into the Home. */
+  guest: boolean;
   protected: boolean;
 }
 
@@ -19,6 +22,7 @@ export async function listHomeUsers(adminToken: string): Promise<HomeUser[]> {
     title: String(u.title),
     admin: u.admin === "1",
     restricted: u.restricted === "1",
+    guest: u.guest === "1",
     protected: u.protected === "1",
   }));
 }

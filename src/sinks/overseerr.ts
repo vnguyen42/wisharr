@@ -61,9 +61,9 @@ export class OverseerrSink implements Sink {
    * Map a Plex Home profile to its Overseerr account. Not every Plex user
    * exists in Overseerr (managed users usually don't) — unmatched requesters
    * return undefined and the request falls back to the admin, with a single
-   * informational log per unknown user.
+   * informational log per unknown user. Public: the web UI shows the mapping.
    */
-  private async resolveRequester(requester: Requester): Promise<number | undefined> {
+  async resolveRequester(requester: Requester): Promise<number | undefined> {
     await this.loadUsers();
     let id = this.byPlexId.get(requester.plexId) ?? this.byName.get(requester.title.toLowerCase());
 

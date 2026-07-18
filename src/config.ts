@@ -63,6 +63,12 @@ export const configSchema = z.object({
       message: "configure at least one sink (overseerr, radarr or sonarr)",
     }),
   database: z.string().default("data/wisharr.db"),
+  ui: z
+    .object({
+      enabled: z.boolean().default(true),
+      port: z.number().int().min(1).max(65535).default(9797),
+    })
+    .default({}),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -75,7 +81,11 @@ function expandEnv(raw: string): string {
   return raw.replace(/\$\{([A-Z0-9_]+)\}/g, (match, name) => process.env[name] ?? match);
 }
 
-export function loadConfig(path = process.env.WISHARR_CONFIG ?? "config/config.yml"): Config {
+export function configPath(): string {
+  return process.env.WISHARR_CONFIG ?? "config/config.yml";
+}
+
+export function loadConfig(path = configPath()): Config {
   const raw = expandEnv(readFileSync(path, "utf8"));
   return configSchema.parse(parse(raw));
 }

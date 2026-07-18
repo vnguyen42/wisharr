@@ -72,13 +72,42 @@ function sinksToSeed(config: Config, store: Store, sinks: Sink[], opts: SyncOpti
   return new Set(sinks.filter((s) => !store.sinkKnown(s.name)).map((s) => s.name));
 }
 
+export interface UserReport {
+  plexId: number;
+  title: string;
+  admin: boolean;
+  managed: boolean;
+  guest: boolean;
+  protected: boolean;
+  excluded: boolean;
+  /** null when the watchlist could not be fetched (see error). */
+  items: number | null;
+  seeded: number;
+  added: { title: string; sink: string }[];
+  error?: string;
+}
+
+export interface CycleReport {
+  startedAt: string;
+  durationMs: number;
+  seedMode: boolean;
+  users: UserReport[];
+}
+
 /** One full cycle: enumerate Home profiles, mint tokens, fetch watchlists, push. */
 export async function runSync(
   config: Config,
   store: Store,
   sinks: Sink[],
   opts: SyncOptions = {},
-): Promise<void> {
+): Promise<CycleReport> {
+  const startedAt = new Date();
+  const report: CycleReport = {
+    startedAt: startedAt.toISOString(),
+    durationMs: 0,
+    seedMode: opts.seed ?? false,
+    users: [],
+  };
   const seedSinks = sinksToSeed(config, store, sinks, opts);
   if (seedSinks.size > 0 && !opts.seed) {
     log.info(
@@ -91,13 +120,28 @@ export async function runSync(
   log.info(`found ${users.length} Plex Home profile(s)`);
 
   for (const user of users) {
-    if (config.plex.excludeUsers.includes(user.title)) continue;
-    if (user.admin && !config.sync.includeOwner) continue;
+    const userReport: UserReport = {
+      plexId: user.id,
+      title: user.title,
+      admin: user.admin,
+      managed: user.restricted,
+      guest: user.guest,
+      protected: user.protected,
+      excluded:
+        config.plex.excludeUsers.includes(user.title) ||
+        (user.admin && !config.sync.includeOwner),
+      items: null,
+      seeded: 0,
+      added: [],
+    };
+    report.users.push(userReport);
+    if (userReport.excluded) continue;
 
     let fetched;
     try {
       fetched = await fetchWatchlistAs(config, store, user);
     } catch (err) {
+      userReport.error = (err as Error).message;
       if (err instanceof PlexApiError && err.status === 429) {
         log.warn(`plex.tv rate limit while syncing "${user.title}", will retry next cycle`);
       } else {
@@ -106,6 +150,7 @@ export async function runSync(
       continue;
     }
     const { token, items } = fetched;
+    userReport.items = items.length;
     log.info(`"${user.title}": ${items.length} watchlist item(s)`);
 
     let seeded = 0;
@@ -116,7 +161,7 @@ export async function runSync(
 
       if (toSeed.length > 0) {
         for (const sink of toSeed) {
-          store.markSynced(user.title, rawItem.guid, sink.name, rawItem.title);
+          store.markSynced(user.title, rawItem.guid, sink.name, rawItem.title, true);
         }
         seeded++;
       }
@@ -136,6 +181,7 @@ export async function runSync(
             store.markSynced(user.title, item.guid, sink.name, item.title);
           }
           if (result === "added") {
+            userReport.added.push({ title: item.title, sink: sink.name });
             log.info(`${sink.name}: added "${item.title}" (from ${user.title})`);
           }
         } catch (err) {
@@ -143,8 +189,12 @@ export async function runSync(
         }
       }
     }
+    userReport.seeded = seeded;
     if (seeded > 0) {
       log.info(`"${user.title}": seeded ${seeded} item(s) as already synced`);
     }
   }
+
+  report.durationMs = Date.now() - startedAt.getTime();
+  return report;
 }

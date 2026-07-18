@@ -99,11 +99,13 @@ export async function discoverPlexToken(): Promise<string> {
   );
 }
 
-/**
- * Use the configured token when present, otherwise fall back to auto-detection.
- * An unexpanded ${VAR} placeholder (env var not set) counts as "not configured".
- */
+/** An unexpanded ${VAR} placeholder (env var not set) counts as "not configured". */
+export function isConfiguredToken(raw: string): boolean {
+  return Boolean(raw) && !/^\$\{[A-Z0-9_]+\}$/.test(raw);
+}
+
+/** Use the configured token when present, otherwise fall back to auto-detection. */
 export async function resolvePlexToken(configured: string): Promise<string> {
-  if (configured && !/^\$\{[A-Z0-9_]+\}$/.test(configured)) return configured;
+  if (isConfiguredToken(configured)) return configured;
   return discoverPlexToken();
 }
