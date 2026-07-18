@@ -19,8 +19,15 @@ plex:
   excludeUsers: []
 
 sync:
+  # How often watchlists are polled.
   intervalMinutes: 20
+  # Also sync the admin account's own watchlist.
   includeOwner: true
+  # When a sink is synced for the very first time (fresh install, or a sink
+  # added later), absorb the existing watchlist backlog silently instead of
+  # requesting everything at once. Set to false if you DO want the whole
+  # backlog pushed on first sync.
+  seedOnFirstRun: true
 
 # Configure at least one sink. Overseerr/Jellyseerr is the recommended one:
 # it handles quality profiles, approvals and both movies & shows by itself.

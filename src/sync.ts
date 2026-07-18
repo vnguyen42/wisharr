@@ -55,11 +55,21 @@ async function fetchWatchlistAs(
 
 export interface SyncOptions {
   /**
-   * Seed mode: mark every current watchlist item as already synced without
-   * pushing anything. Run once on a fresh install so only items added from
-   * now on generate requests, instead of blasting the whole backlog.
+   * Force seed mode for every sink: mark every current watchlist item as
+   * already synced without pushing anything (`npm run seed`).
    */
   seed?: boolean;
+}
+
+/**
+ * Sinks whose backlog should be absorbed silently this cycle: all of them when
+ * seeding is forced, otherwise — with seedOnFirstRun — any sink that has never
+ * been synced to (fresh install, or a sink newly added to the config).
+ */
+function sinksToSeed(config: Config, store: Store, sinks: Sink[], opts: SyncOptions): Set<string> {
+  if (opts.seed) return new Set(sinks.map((s) => s.name));
+  if (!config.sync.seedOnFirstRun) return new Set();
+  return new Set(sinks.filter((s) => !store.sinkKnown(s.name)).map((s) => s.name));
 }
 
 /** One full cycle: enumerate Home profiles, mint tokens, fetch watchlists, push. */
@@ -69,6 +79,14 @@ export async function runSync(
   sinks: Sink[],
   opts: SyncOptions = {},
 ): Promise<void> {
+  const seedSinks = sinksToSeed(config, store, sinks, opts);
+  if (seedSinks.size > 0 && !opts.seed) {
+    log.info(
+      `first sync for sink(s) ${[...seedSinks].join(", ")}: absorbing the existing backlog ` +
+        `without pushing (disable with sync.seedOnFirstRun: false)`,
+    );
+  }
+
   const users = await listHomeUsers(config.plex.token);
   log.info(`found ${users.length} Plex Home profile(s)`);
 
@@ -93,15 +111,16 @@ export async function runSync(
     let seeded = 0;
     for (const rawItem of items) {
       const pending = sinks.filter((s) => !store.isSynced(user.title, rawItem.guid, s.name));
-      if (pending.length === 0) continue;
+      const toSeed = pending.filter((s) => seedSinks.has(s.name));
+      const toPush = pending.filter((s) => !seedSinks.has(s.name));
 
-      if (opts.seed) {
-        for (const sink of pending) {
+      if (toSeed.length > 0) {
+        for (const sink of toSeed) {
           store.markSynced(user.title, rawItem.guid, sink.name, rawItem.title);
         }
         seeded++;
-        continue;
       }
+      if (toPush.length === 0) continue;
 
       let item = rawItem;
       try {
@@ -110,7 +129,7 @@ export async function runSync(
         log.warn(`cannot resolve IDs for "${rawItem.title}": ${(err as Error).message}`);
       }
 
-      for (const sink of pending) {
+      for (const sink of toPush) {
         try {
           const result = await sink.push(item, user.title);
           if (result !== "skipped") {
@@ -124,7 +143,7 @@ export async function runSync(
         }
       }
     }
-    if (opts.seed && seeded > 0) {
+    if (seeded > 0) {
       log.info(`"${user.title}": seeded ${seeded} item(s) as already synced`);
     }
   }

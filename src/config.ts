@@ -45,6 +45,12 @@ export const configSchema = z.object({
       intervalMinutes: z.number().int().min(1).default(20),
       /** Also sync the admin account's own watchlist. */
       includeOwner: z.boolean().default(true),
+      /**
+       * When a sink has never been synced to (fresh install, or a sink added
+       * later), silently mark the existing watchlist backlog as synced instead
+       * of requesting all of it at once. Set to false to push the backlog.
+       */
+      seedOnFirstRun: z.boolean().default(true),
     })
     .default({}),
   sinks: z

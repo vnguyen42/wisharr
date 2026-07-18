@@ -18,14 +18,13 @@ Wisharr uses the same API Plex's own clients use to switch profiles: `POST plex.
 cp config/config.example.yml config/config.yml
 # edit config.yml, or export PLEX_TOKEN / OVERSEERR_API_KEY
 npm install
-npm run seed        # first run: mark the existing backlog as synced (recommended)
 npm run sync        # one-shot
 npm run dev         # scheduled loop (default: every 20 min)
 ```
 
 **Plex token auto-detection** — if Wisharr runs on the same machine as your Plex Media Server, you can leave `plex.token` empty: it is auto-detected from the local install (macOS preferences, `Preferences.xml` on Linux/Docker, Windows registry) and validated against plex.tv before use. If detection fails, Wisharr tells you and falls back to the configured token.
 
-**Seeding** — on a fresh install, `npm run seed` marks every item currently on the watchlists as already synced, without pushing anything. Only items added *from then on* generate requests — no 200-request blast into Overseerr on day one.
+**First-run behavior** — by default (`sync.seedOnFirstRun: true`), the first time a sink is ever synced — fresh install, or a sink you add to the config months later — Wisharr absorbs the existing watchlist backlog silently: items already on the lists are marked as synced without being requested. Only items added *from then on* generate requests — no 200-request blast into Overseerr on day one. Prefer the opposite? Set `seedOnFirstRun: false` and the whole backlog is pushed on the first sync. `npm run seed` is also available to force-absorb the current state at any time.
 
 Or with Docker:
 

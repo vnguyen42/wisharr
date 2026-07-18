@@ -55,6 +55,11 @@ export class Store {
     this.db.prepare("DELETE FROM tokens WHERE user_id = ?").run(userId);
   }
 
+  /** True if this sink has ever received (or been seeded with) any item. */
+  sinkKnown(sink: string): boolean {
+    return this.db.prepare("SELECT 1 FROM synced WHERE sink = ? LIMIT 1").get(sink) !== undefined;
+  }
+
   isSynced(user: string, guid: string, sink: string): boolean {
     return (
       this.db
