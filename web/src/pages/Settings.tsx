@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, usePolling } from "../api";
 import { Card, Chip, Switch } from "../components";
 import { SinkCard } from "./SinkCard";
@@ -8,6 +8,28 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
   const { data: config, refetch } = usePolling<ApiConfig>("/api/config", 60_000);
   const [plexTest, setPlexTest] = useState<{ ok: boolean; detail: string } | null>(null);
   const [interval, setIntervalValue] = useState<string | null>(null);
+
+  const configuredInterval = config?.sync.intervalMinutes;
+
+  function commitInterval(raw: string) {
+    const minutes = Number(raw);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) return;
+    if (minutes === configuredInterval) return;
+    void save({ sync: { intervalMinutes: minutes } }, `Sync interval set to ${minutes} min`);
+  }
+
+  // Auto-save shortly after the last change — spinner clicks never blur the
+  // input, so waiting for onBlur alone silently dropped those edits.
+  useEffect(() => {
+    if (interval === null) return;
+    const timer = setTimeout(() => commitInterval(interval), 800);
+    return () => clearTimeout(timer);
+  }, [interval]);
+
+  // Drop the local draft once the server confirms the new value.
+  useEffect(() => {
+    if (interval !== null && Number(interval) === configuredInterval) setIntervalValue(null);
+  }, [configuredInterval, interval]);
 
   async function save(update: object, message: string) {
     try {
@@ -79,15 +101,9 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
             value={intervalShown}
             aria-label="Sync interval in minutes"
             onChange={(e) => setIntervalValue(e.target.value)}
-            onBlur={() => {
-              const minutes = Number(intervalShown);
-              if (minutes >= 1 && minutes !== config.sync.intervalMinutes) {
-                void save(
-                  { sync: { intervalMinutes: minutes } },
-                  `Sync interval set to ${minutes} min`,
-                );
-              }
-              setIntervalValue(null);
+            onBlur={() => commitInterval(intervalShown)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitInterval(intervalShown);
             }}
           />
         </div>
