@@ -1,14 +1,14 @@
 import type { RadarrConfig } from "../config.js";
 import { log } from "../logger.js";
 import type { WatchlistItem } from "../plex/watchlist.js";
-import type { PushResult, Sink } from "./sink.js";
+import type { PushResult, Requester, Sink } from "./sink.js";
 
 export class RadarrSink implements Sink {
   readonly name = "radarr";
 
   constructor(private readonly cfg: RadarrConfig) {}
 
-  async push(item: WatchlistItem, user: string): Promise<PushResult> {
+  async push(item: WatchlistItem, requester: Requester): Promise<PushResult> {
     if (item.type !== "movie") return "skipped";
     if (!item.tmdbId) {
       log.warn(`radarr: no tmdbId for "${item.title}", skipping`);
@@ -31,7 +31,9 @@ export class RadarrSink implements Sink {
     const body = await res.text();
     // Radarr rejects duplicates with a MovieExistsValidator failure.
     if (res.status === 400 && body.includes("MovieExistsValidator")) return "already-present";
-    throw new Error(`radarr add failed (${res.status}) for "${item.title}" [${user}]: ${body}`);
+    throw new Error(
+      `radarr add failed (${res.status}) for "${item.title}" [${requester.title}]: ${body}`,
+    );
   }
 
   private api(method: string, path: string, body?: unknown): Promise<Response> {

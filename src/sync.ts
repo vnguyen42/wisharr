@@ -131,7 +131,7 @@ export async function runSync(
 
       for (const sink of toPush) {
         try {
-          const result = await sink.push(item, user.title);
+          const result = await sink.push(item, { plexId: user.id, title: user.title });
           if (result !== "skipped") {
             store.markSynced(user.title, item.guid, sink.name, item.title);
           }

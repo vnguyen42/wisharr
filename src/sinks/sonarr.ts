@@ -1,14 +1,14 @@
 import type { SonarrConfig } from "../config.js";
 import { log } from "../logger.js";
 import type { WatchlistItem } from "../plex/watchlist.js";
-import type { PushResult, Sink } from "./sink.js";
+import type { PushResult, Requester, Sink } from "./sink.js";
 
 export class SonarrSink implements Sink {
   readonly name = "sonarr";
 
   constructor(private readonly cfg: SonarrConfig) {}
 
-  async push(item: WatchlistItem, user: string): Promise<PushResult> {
+  async push(item: WatchlistItem, requester: Requester): Promise<PushResult> {
     if (item.type !== "show") return "skipped";
     if (!item.tvdbId) {
       log.warn(`sonarr: no tvdbId for "${item.title}", skipping`);
@@ -33,7 +33,9 @@ export class SonarrSink implements Sink {
     const body = await res.text();
     // Sonarr rejects duplicates with a SeriesExistsValidator failure.
     if (res.status === 400 && body.includes("SeriesExistsValidator")) return "already-present";
-    throw new Error(`sonarr add failed (${res.status}) for "${item.title}" [${user}]: ${body}`);
+    throw new Error(
+      `sonarr add failed (${res.status}) for "${item.title}" [${requester.title}]: ${body}`,
+    );
   }
 
   private api(method: string, path: string, body?: unknown): Promise<Response> {
