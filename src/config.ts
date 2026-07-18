@@ -67,6 +67,13 @@ export const configSchema = z.object({
     .object({
       enabled: z.boolean().default(true),
       port: z.number().int().min(1).max(65535).default(9797),
+      /** When set, the whole UI and API require HTTP Basic auth. */
+      auth: z
+        .object({
+          username: z.string().min(1),
+          password: z.string().min(1),
+        })
+        .optional(),
     })
     .default({}),
 });

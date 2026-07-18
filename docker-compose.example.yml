@@ -1,12 +1,16 @@
 services:
   wisharr:
-    image: vnguyen42/wisharr:latest
+    image: ghcr.io/vnguyen42/wisharr:latest
     container_name: wisharr
     restart: unless-stopped
     environment:
+      # Only needed when Plex Media Server is NOT in this container's reach —
+      # see the README for token auto-detection.
       - PLEX_TOKEN=${PLEX_TOKEN}
       - OVERSEERR_API_KEY=${OVERSEERR_API_KEY}
       - LOG_LEVEL=info
+    ports:
+      - "9797:9797"
     volumes:
       - ./config:/app/config
       - ./data:/app/data

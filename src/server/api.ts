@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { basicAuth } from "hono/basic-auth";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { streamSSE } from "hono/streaming";
 import {
@@ -15,7 +16,7 @@ import { OverseerrSink } from "../sinks/overseerr.js";
 import { configUpdateSchema, updateConfigFile } from "./config-write.js";
 import type { SyncManager } from "./manager.js";
 
-export const VERSION = "0.3.1";
+export const VERSION = "0.4.0";
 
 const SINK_SCHEMAS = {
   overseerr: overseerrSchema,
@@ -36,6 +37,13 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
   const overseerr = () =>
     manager.sinks.find((s): s is OverseerrSink => s instanceof OverseerrSink);
   const app = new Hono();
+
+  // Unauthenticated on purpose: Docker healthchecks and reverse-proxy probes.
+  app.get("/api/health", (c) => c.json({ ok: true, version: VERSION }));
+
+  if (config.ui.auth) {
+    app.use("*", basicAuth(config.ui.auth));
+  }
 
   app.get("/api/status", (c) => {
     const last = manager.lastReport;

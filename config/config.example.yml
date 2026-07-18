@@ -55,3 +55,12 @@ sinks:
   #   seasonFolder: true
 
 database: data/wisharr.db
+
+ui:
+  enabled: true
+  port: 9797
+  # Uncomment to require a login on the web UI and API (recommended if the
+  # port is reachable beyond your LAN):
+  # auth:
+  #   username: admin
+  #   password: ${WISHARR_PASSWORD}

@@ -32,5 +32,14 @@ if (process.argv.includes("--seed")) {
     });
   }
 
+  const shutdown = (signal: string) => {
+    log.info(`${signal} received, shutting down`);
+    manager.stop();
+    store.close();
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+
   await manager.runCycle();
 }

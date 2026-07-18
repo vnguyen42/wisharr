@@ -42,24 +42,34 @@ const icons: Record<Page, React.ReactNode> = {
   ),
 };
 
-function useCountdown(nextRunAt: string | null): string {
+function useCountdown(nextRunAt: string | null): { label: string; seconds: number | null } {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
-  if (!nextRunAt) return "—";
+  if (!nextRunAt) return { label: "—", seconds: null };
   const seconds = Math.max(0, Math.round((Date.parse(nextRunAt) - now) / 1000));
   const m = String(Math.floor(seconds / 60)).padStart(2, "0");
   const s = String(seconds % 60).padStart(2, "0");
-  return `${m}:${s}`;
+  return { label: `${m}:${s}`, seconds };
 }
 
 export function App() {
   const [page, setPage] = useState<Page>("dashboard");
   const { data: status, refetch } = usePolling<Status>("/api/status", 10_000);
-  const countdown = useCountdown(status?.nextRunAt ?? null);
+  const { label: countdown, seconds } = useCountdown(status?.nextRunAt ?? null);
   const [toast, setToast] = useState<{ msg: string; err: boolean } | null>(null);
+
+  // A cycle lasts a few seconds — far less than the 10 s polling interval.
+  // When the countdown hits zero, show the syncing state and poll fast until
+  // the server hands back the next schedule.
+  const syncing = Boolean(status?.running) || seconds === 0;
+  useEffect(() => {
+    if (seconds !== 0) return;
+    const fast = setInterval(refetch, 2000);
+    return () => clearInterval(fast);
+  }, [seconds === 0]);
 
   function showToast(msg: string, err = false) {
     setToast({ msg, err });
@@ -130,9 +140,9 @@ export function App() {
           <h1 className="page-title">{TITLES[page]}</h1>
           <div className="spacer" />
           <span className="next-sync">
-            {status?.running ? "sync running…" : <>next sync in <b>{countdown}</b></>}
+            {syncing ? <b>sync running…</b> : <>next sync in <b>{countdown}</b></>}
           </span>
-          <button className="btn btn-primary" onClick={() => void syncNow()} disabled={status?.running}>
+          <button className="btn btn-primary" onClick={() => void syncNow()} disabled={syncing}>
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
               <path d="M11 6.5a4.5 4.5 0 1 1-1.4-3.3M11 1v2.5H8.5" />
             </svg>
