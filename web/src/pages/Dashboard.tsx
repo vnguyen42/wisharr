@@ -10,10 +10,12 @@ export function Dashboard({ status }: { status: Status | null }) {
     <>
       <div className="tiles">
         <Tile
-          label="Home profiles"
-          value={status?.plex.profiles ?? "—"}
+          label="Watchlists"
+          value={status ? status.plex.profiles + status.plex.friends : "—"}
           sub={
-            status ? `${status.plex.managed} managed · ${status.plex.guests} guests` : undefined
+            status
+              ? `${status.plex.profiles} Home (${status.plex.managed} managed) · ${status.plex.friends} friends`
+              : undefined
           }
         />
         <Tile label="Tracked items" value={status?.totals.trackedItems ?? "—"} sub="across all watchlists" />
@@ -54,6 +56,16 @@ export function Dashboard({ status }: { status: Status | null }) {
           <div className="stack">
             <div>
               Admin token <Chip tone="accent">{status?.plex.tokenSource ?? "…"}</Chip>
+            </div>
+            <div>
+              Real-time RSS{" "}
+              {status?.rss === "active" ? (
+                <Chip tone="ok">active</Chip>
+              ) : status?.rss === "unavailable" ? (
+                <Chip tone="warn">needs Plex Pass</Chip>
+              ) : (
+                <Chip tone="muted">off</Chip>
+              )}
             </div>
             <div className="cell-muted">
               {status ? `${status.plex.profiles} Home profiles discovered` : "waiting for first cycle…"}

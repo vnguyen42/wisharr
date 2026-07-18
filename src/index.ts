@@ -42,4 +42,5 @@ if (process.argv.includes("--seed")) {
   process.on("SIGINT", () => shutdown("SIGINT"));
 
   await manager.runCycle();
+  await manager.startRss();
 }

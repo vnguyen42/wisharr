@@ -1,7 +1,7 @@
 import type { RadarrConfig } from "../config.js";
 import { log } from "../logger.js";
 import type { WatchlistItem } from "../plex/watchlist.js";
-import type { PushResult, Requester, Sink } from "./sink.js";
+import type { PushResult, RemoveResult, Requester, Sink } from "./sink.js";
 
 export class RadarrSink implements Sink {
   readonly name = "radarr";
@@ -34,6 +34,21 @@ export class RadarrSink implements Sink {
     throw new Error(
       `radarr add failed (${res.status}) for "${item.title}" [${requester.title}]: ${body}`,
     );
+  }
+
+  /** Unmonitor only — files and the movie entry itself are never deleted. */
+  async remove(item: WatchlistItem): Promise<RemoveResult> {
+    if (item.type !== "movie" || !item.tmdbId) return "skipped";
+    const res = await this.api("GET", `/api/v3/movie?tmdbId=${item.tmdbId}`);
+    if (!res.ok) throw new Error(`radarr lookup failed (${res.status})`);
+    const [movie] = (await res.json()) as ({ id: number; monitored: boolean } & object)[];
+    if (!movie || !movie.monitored) return "skipped";
+    const put = await this.api("PUT", `/api/v3/movie/${movie.id}`, {
+      ...movie,
+      monitored: false,
+    });
+    if (!put.ok) throw new Error(`radarr unmonitor failed (${put.status})`);
+    return "removed";
   }
 
   private api(method: string, path: string, body?: unknown): Promise<Response> {

@@ -1,6 +1,6 @@
 {
   "name": "wisharr",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Sync Plex watchlists — including Plex Home managed users — to Overseerr, Radarr and Sonarr. One admin token, zero copy-paste.",
   "type": "module",
   "license": "MIT",

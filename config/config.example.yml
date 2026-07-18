@@ -23,11 +23,21 @@ sync:
   intervalMinutes: 20
   # Also sync the admin account's own watchlist.
   includeOwner: true
-  # When a sink is synced for the very first time (fresh install, or a sink
-  # added later), absorb the existing watchlist backlog silently instead of
-  # requesting everything at once. Set to false if you DO want the whole
-  # backlog pushed on first sync.
+  # When a sink or a user is synced for the very first time (fresh install,
+  # a sink added later, a new friend or Home profile), absorb their existing
+  # watchlist backlog silently instead of requesting everything at once.
   seedOnFirstRun: true
+  # Also sync watchlists of friends outside the Plex Home (their watchlist
+  # visibility must allow friends).
+  friends: true
+  # Near-real-time sync between polls via Plex Pass RSS feeds. Silently
+  # skipped when the account has no Plex Pass.
+  rss: true
+  rssIntervalSeconds: 60
+  # When an item leaves every watchlist: delete its Overseerr request and
+  # unmonitor it in Radarr/Sonarr. Only touches items Wisharr itself added,
+  # and never deletes files. Opt-in.
+  removal: false
 
 # Configure at least one sink. Overseerr/Jellyseerr is the recommended one:
 # it handles quality profiles, approvals and both movies & shows by itself.

@@ -110,7 +110,7 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
         <div className="form-row">
           <div className="form-label">
             <div className="name">Seed on first run</div>
-            <div className="hint">Absorb a new sink's backlog silently</div>
+            <div className="hint">Absorb the backlog of new sinks and new users silently</div>
           </div>
           <Switch
             checked={config.sync.seedOnFirstRun}
@@ -118,7 +118,55 @@ export function Settings({ onToast }: { onToast: (msg: string, err?: boolean) =>
             onChange={(next) =>
               void save(
                 { sync: { seedOnFirstRun: next } },
-                next ? "New sinks will be seeded" : "New sinks will receive the backlog",
+                next ? "New sinks and users will be seeded" : "Backlogs will be pushed",
+              )
+            }
+          />
+        </div>
+        <div className="form-row">
+          <div className="form-label">
+            <div className="name">Sync friends</div>
+            <div className="hint">Watchlists of friends outside the Home (visibility permitting)</div>
+          </div>
+          <Switch
+            checked={config.sync.friends}
+            label="Sync friends"
+            onChange={(next) =>
+              void save(
+                { sync: { friends: next } },
+                next ? "Friends will sync from the next cycle" : "Friend sync disabled",
+              )
+            }
+          />
+        </div>
+        <div className="form-row">
+          <div className="form-label">
+            <div className="name">Real-time RSS</div>
+            <div className="hint">Plex Pass feeds polled every {config.sync.rssIntervalSeconds}s — restart to apply</div>
+          </div>
+          <Switch
+            checked={config.sync.rss}
+            label="Real-time RSS"
+            onChange={(next) =>
+              void save({ sync: { rss: next } }, "RSS setting saved — restart Wisharr to apply")
+            }
+          />
+        </div>
+        <div className="form-row">
+          <div className="form-label">
+            <div className="name">Removal sync</div>
+            <div className="hint">
+              Item off every watchlist → delete its request, unmonitor in Radarr/Sonarr. Only
+              touches what Wisharr added; never deletes files.
+            </div>
+          </div>
+          <Switch
+            checked={config.sync.removal}
+            label="Removal sync"
+            onChange={(next) =>
+              void save(
+                { sync: { removal: next } },
+                next ? "Removal sync enabled" : "Removal sync disabled",
               )
             }
           />

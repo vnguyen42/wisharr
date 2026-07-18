@@ -46,11 +46,23 @@ export const configSchema = z.object({
       /** Also sync the admin account's own watchlist. */
       includeOwner: z.boolean().default(true),
       /**
-       * When a sink has never been synced to (fresh install, or a sink added
-       * later), silently mark the existing watchlist backlog as synced instead
-       * of requesting all of it at once. Set to false to push the backlog.
+       * When a sink or a user is synced for the very first time (fresh
+       * install, a sink added later, or a new friend/profile), silently mark
+       * their existing watchlist backlog as synced instead of requesting all
+       * of it at once. Set to false to push the backlog.
        */
       seedOnFirstRun: z.boolean().default(true),
+      /** Also sync watchlists of friends outside the Plex Home (community API). */
+      friends: z.boolean().default(true),
+      /** Poll Plex Pass RSS feeds between cycles for near-real-time sync. */
+      rss: z.boolean().default(true),
+      rssIntervalSeconds: z.number().int().min(30).max(3600).default(60),
+      /**
+       * When an item leaves every watchlist, undo what Wisharr did for it:
+       * delete the Overseerr request, unmonitor in Radarr/Sonarr. Only items
+       * Wisharr itself pushed are touched — never seeded backlog. Opt-in.
+       */
+      removal: z.boolean().default(false),
     })
     .default({}),
   sinks: z

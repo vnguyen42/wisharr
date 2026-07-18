@@ -8,9 +8,10 @@ export interface Status {
     tokenSource: "config" | "auto-detected";
     profiles: number;
     managed: number;
-    guests: number;
+    friends: number;
     errors: number;
   };
+  rss: "off" | "active" | "unavailable";
   sinks: { name: string }[];
   lastCycle: {
     startedAt: string;
@@ -22,18 +23,20 @@ export interface Status {
 }
 
 export interface ApiUser {
-  plexId: number;
+  plexId: number | null;
   title: string;
   admin: boolean;
   managed: boolean;
   guest: boolean;
+  friend: boolean;
   protected: boolean;
   excluded: boolean;
   items: number | null;
   seeded: number;
   added: { title: string; sink: string }[];
+  removed: { title: string; sink: string }[];
   error?: string;
-  tokenCached: "owner" | "cached" | "none";
+  tokenCached: "owner" | "cached" | "none" | "n/a";
   overseerrUserId: number | null;
 }
 
@@ -64,7 +67,15 @@ export interface ApiConfig {
     excludeUsers: string[];
     pinnedProfiles: string[];
   };
-  sync: { intervalMinutes: number; includeOwner: boolean; seedOnFirstRun: boolean };
+  sync: {
+    intervalMinutes: number;
+    includeOwner: boolean;
+    seedOnFirstRun: boolean;
+    friends: boolean;
+    rss: boolean;
+    rssIntervalSeconds: number;
+    removal: boolean;
+  };
   sinks: {
     overseerr: SinkConfig | null;
     radarr: SinkConfig | null;

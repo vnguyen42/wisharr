@@ -44,7 +44,12 @@ npm run dev         # scheduled loop + web UI (default: every 20 min)
 1. `GET plex.tv/api/home/users` — enumerate every profile in your Plex Home (admin token).
 2. For each managed profile, `POST .../switch` mints a fresh user-scoped token (with the profile's PIN if protected).
 3. `GET discover.provider.plex.tv/library/sections/watchlist/all` — fetch that user's watchlist; external IDs (TMDB/TVDB/IMDB) resolved per item.
-4. Push to your configured sinks — Overseerr/Jellyseerr requests, or direct Radarr/Sonarr adds. A local SQLite store dedups so items are only pushed once per user per sink.
+4. **Friends outside the Home** are covered too (`sync.friends`): their watchlists come from the Plex community GraphQL API using only your admin token — their watchlist visibility must allow friends.
+5. Push to your configured sinks — Overseerr/Jellyseerr requests, or direct Radarr/Sonarr adds. A local SQLite store dedups so items are only pushed once per user per sink.
+
+**Near real-time** — with a Plex Pass, Wisharr generates the watchlist RSS feeds and polls them every `sync.rssIntervalSeconds` (60s default). New activity triggers a full sync cycle immediately instead of waiting for the next poll. Without Plex Pass this is skipped silently and the regular interval applies.
+
+**Removal sync** (`sync.removal`, opt-in) — when an item disappears from every watchlist, Wisharr undoes what it did: the Overseerr request is deleted and the item is unmonitored in Radarr/Sonarr. Only items Wisharr itself pushed are touched — pre-existing backlog is never removed, and files are never deleted. Re-adding the item to a watchlist requests it again.
 
 **Request attribution** — Overseerr requests are credited to the right person: Wisharr matches each Plex Home profile against Overseerr's user list (by Plex account id first, display name as fallback), so quotas, permissions and request history apply per user. Plex users with no Overseerr account — managed users typically, or friends never imported — fall back to the API key owner, with a one-time log line naming them.
 

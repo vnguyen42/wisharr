@@ -16,6 +16,9 @@ export const configUpdateSchema = z.object({
       intervalMinutes: z.number().int().min(1).max(1440).optional(),
       includeOwner: z.boolean().optional(),
       seedOnFirstRun: z.boolean().optional(),
+      friends: z.boolean().optional(),
+      rss: z.boolean().optional(),
+      removal: z.boolean().optional(),
     })
     .optional(),
   plex: z
@@ -46,6 +49,9 @@ export function updateConfigFile(path: string, update: ConfigUpdate): void {
     [["sync", "intervalMinutes"], update.sync?.intervalMinutes],
     [["sync", "includeOwner"], update.sync?.includeOwner],
     [["sync", "seedOnFirstRun"], update.sync?.seedOnFirstRun],
+    [["sync", "friends"], update.sync?.friends],
+    [["sync", "rss"], update.sync?.rss],
+    [["sync", "removal"], update.sync?.removal],
     [["plex", "excludeUsers"], update.plex?.excludeUsers],
   ];
   for (const [sinkName, fields] of Object.entries(update.sinks ?? {})) {

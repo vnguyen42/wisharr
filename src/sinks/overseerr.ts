@@ -1,7 +1,7 @@
 import type { OverseerrConfig } from "../config.js";
 import { log } from "../logger.js";
 import type { WatchlistItem } from "../plex/watchlist.js";
-import type { PushResult, Requester, Sink } from "./sink.js";
+import type { PushResult, RemoveResult, Requester, Sink } from "./sink.js";
 
 interface OverseerrUser {
   id: number;
@@ -57,6 +57,39 @@ export class OverseerrSink implements Sink {
     );
   }
 
+  /** Delete the matching request (the media record itself is left alone). */
+  async remove(item: WatchlistItem): Promise<RemoveResult> {
+    if (!item.tmdbId) return "skipped";
+    const wantedType = item.type === "movie" ? "movie" : "tv";
+
+    const pageSize = 100;
+    for (let skip = 0; ; skip += pageSize) {
+      const res = await fetch(
+        `${this.cfg.url}/api/v1/request?take=${pageSize}&skip=${skip}&sort=added`,
+        { headers: { "X-Api-Key": this.cfg.apiKey } },
+      );
+      if (!res.ok) throw new Error(`overseerr request list failed (${res.status})`);
+      const { results } = (await res.json()) as {
+        results: { id: number; type: string; media?: { tmdbId?: number } }[];
+      };
+
+      const match = results.find(
+        (r) => r.type === wantedType && r.media?.tmdbId === item.tmdbId,
+      );
+      if (match) {
+        const del = await fetch(`${this.cfg.url}/api/v1/request/${match.id}`, {
+          method: "DELETE",
+          headers: { "X-Api-Key": this.cfg.apiKey },
+        });
+        if (!del.ok && del.status !== 404) {
+          throw new Error(`overseerr request delete failed (${del.status})`);
+        }
+        return "removed";
+      }
+      if (results.length < pageSize) return "skipped"; // no request found
+    }
+  }
+
   /**
    * Map a Plex Home profile to its Overseerr account. Not every Plex user
    * exists in Overseerr (managed users usually don't) — unmatched requesters
@@ -65,13 +98,16 @@ export class OverseerrSink implements Sink {
    */
   async resolveRequester(requester: Requester): Promise<number | undefined> {
     await this.loadUsers();
-    let id = this.byPlexId.get(requester.plexId) ?? this.byName.get(requester.title.toLowerCase());
+    const lookup = () =>
+      (requester.plexId !== undefined ? this.byPlexId.get(requester.plexId) : undefined) ??
+      this.byName.get(requester.title.toLowerCase());
+    let id = lookup();
 
     // Unknown user: maybe they were imported into Overseerr since the last
     // fetch — refresh once (rate-limited) before giving up.
     if (id === undefined && Date.now() - this.usersFetchedAt > USER_CACHE_MIN_REFRESH_MS) {
       await this.loadUsers(true);
-      id = this.byPlexId.get(requester.plexId) ?? this.byName.get(requester.title.toLowerCase());
+      id = lookup();
     }
 
     if (id === undefined && !this.warnedUnknown.has(requester.title)) {

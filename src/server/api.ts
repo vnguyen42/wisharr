@@ -16,7 +16,7 @@ import { OverseerrSink } from "../sinks/overseerr.js";
 import { configUpdateSchema, updateConfigFile } from "./config-write.js";
 import type { SyncManager } from "./manager.js";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.5.0";
 
 const SINK_SCHEMAS = {
   overseerr: overseerrSchema,
@@ -56,11 +56,12 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
       intervalMinutes: config.sync.intervalMinutes,
       plex: {
         tokenSource: isConfiguredToken(rawConfiguredToken) ? "config" : "auto-detected",
-        profiles: users.length,
+        profiles: users.filter((u) => !u.friend).length,
         managed: users.filter((u) => u.managed).length,
-        guests: users.filter((u) => u.guest).length,
-        errors: users.filter((u) => u.error).length,
+        friends: users.filter((u) => u.friend).length,
+        errors: users.filter((u) => u.error && !u.friend).length,
       },
+      rss: manager.rssState,
       sinks: manager.sinks.map((s) => ({ name: s.name })),
       lastCycle: last
         ? {
@@ -87,9 +88,16 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
         // Live view: the report's excluded flag is a snapshot from the last
         // cycle and would lag behind toggles made in the UI.
         excluded: isExcluded(config, u),
-        tokenCached: u.admin ? "owner" : store.getToken(u.plexId) ? "cached" : "none",
+        tokenCached: u.friend
+          ? "n/a"
+          : u.admin
+            ? "owner"
+            : u.plexId !== null && store.getToken(u.plexId)
+              ? "cached"
+              : "none",
         overseerrUserId: sink
-          ? ((await sink.resolveRequester({ plexId: u.plexId, title: u.title })) ?? null)
+          ? ((await sink.resolveRequester({ plexId: u.plexId ?? undefined, title: u.title })) ??
+            null)
           : null,
       });
     }
@@ -199,6 +207,12 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
     if (update.sync?.includeOwner !== undefined) config.sync.includeOwner = update.sync.includeOwner;
     if (update.sync?.seedOnFirstRun !== undefined) {
       config.sync.seedOnFirstRun = update.sync.seedOnFirstRun;
+    }
+    if (update.sync?.friends !== undefined) config.sync.friends = update.sync.friends;
+    if (update.sync?.removal !== undefined) config.sync.removal = update.sync.removal;
+    if (update.sync?.rss !== undefined) {
+      config.sync.rss = update.sync.rss;
+      log.info("RSS setting saved — takes effect after a restart");
     }
     if (update.plex?.excludeUsers !== undefined) {
       config.plex.excludeUsers = update.plex.excludeUsers;

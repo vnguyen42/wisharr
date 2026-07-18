@@ -1,8 +1,9 @@
 import type { Config } from "./config.js";
 import { log } from "./logger.js";
 import { PlexApiError } from "./plex/client.js";
+import { fetchFriendWatchlist, listFriends } from "./plex/friends.js";
 import { type HomeUser, listHomeUsers, switchToHomeUser } from "./plex/home.js";
-import { fetchWatchlist, resolveExternalIds } from "./plex/watchlist.js";
+import { fetchWatchlist, resolveExternalIds, type WatchlistItem } from "./plex/watchlist.js";
 import { OverseerrSink } from "./sinks/overseerr.js";
 import { RadarrSink } from "./sinks/radarr.js";
 import type { Sink } from "./sinks/sink.js";
@@ -73,17 +74,20 @@ function sinksToSeed(config: Config, store: Store, sinks: Sink[], opts: SyncOpti
 }
 
 export interface UserReport {
-  plexId: number;
+  /** null for friends: the community API only exposes a uuid. */
+  plexId: number | null;
   title: string;
   admin: boolean;
   managed: boolean;
   guest: boolean;
+  friend: boolean;
   protected: boolean;
   excluded: boolean;
   /** null when the watchlist could not be fetched (see error). */
   items: number | null;
   seeded: number;
   added: { title: string; sink: string }[];
+  removed: { title: string; sink: string }[];
   error?: string;
 }
 
@@ -116,52 +120,50 @@ export async function runSync(
     );
   }
 
-  const users = await listHomeUsers(config.plex.token);
-  log.info(`found ${users.length} Plex Home profile(s)`);
+  /** Watchlists successfully fetched this cycle, for the removal pass. */
+  const fetchedWatchlists: { title: string; guids: Set<string> }[] = [];
 
-  for (const user of users) {
-    const userReport: UserReport = {
-      plexId: user.id,
-      title: user.title,
-      admin: user.admin,
-      managed: user.restricted,
-      guest: user.guest,
-      protected: user.protected,
-      excluded:
-        config.plex.excludeUsers.includes(user.title) ||
-        (user.admin && !config.sync.includeOwner),
-      items: null,
-      seeded: 0,
-      added: [],
-    };
+  async function processUser(
+    userReport: UserReport,
+    fetchItems: () => Promise<{ token: string; items: WatchlistItem[] }>,
+  ): Promise<void> {
     report.users.push(userReport);
-    if (userReport.excluded) continue;
+    if (userReport.excluded) return;
 
     let fetched;
     try {
-      fetched = await fetchWatchlistAs(config, store, user);
+      fetched = await fetchItems();
     } catch (err) {
       userReport.error = (err as Error).message;
       if (err instanceof PlexApiError && err.status === 429) {
-        log.warn(`plex.tv rate limit while syncing "${user.title}", will retry next cycle`);
+        log.warn(`plex.tv rate limit while syncing "${userReport.title}", will retry next cycle`);
+      } else if (userReport.friend) {
+        // Expected for friends whose watchlist visibility is private.
+        log.debug(`cannot fetch friend watchlist "${userReport.title}": ${(err as Error).message}`);
       } else {
-        log.error(`cannot fetch watchlist for "${user.title}": ${(err as Error).message}`);
+        log.error(`cannot fetch watchlist for "${userReport.title}": ${(err as Error).message}`);
       }
-      continue;
+      return;
     }
     const { token, items } = fetched;
     userReport.items = items.length;
-    log.info(`"${user.title}": ${items.length} watchlist item(s)`);
+    log.info(`"${userReport.title}": ${items.length} watchlist item(s)`);
+
+    // A user never processed before (new profile, new friend) has their
+    // backlog absorbed silently, exactly like a newly added sink.
+    const firstSeen =
+      !opts.seed && config.sync.seedOnFirstRun && !store.isSeen(userReport.title);
+    const seedAll = (opts.seed ?? false) || firstSeen;
 
     let seeded = 0;
     for (const rawItem of items) {
-      const pending = sinks.filter((s) => !store.isSynced(user.title, rawItem.guid, s.name));
-      const toSeed = pending.filter((s) => seedSinks.has(s.name));
-      const toPush = pending.filter((s) => !seedSinks.has(s.name));
+      const pending = sinks.filter((s) => !store.isSynced(userReport.title, rawItem.guid, s.name));
+      const toSeed = pending.filter((s) => seedAll || seedSinks.has(s.name));
+      const toPush = pending.filter((s) => !toSeed.includes(s));
 
       if (toSeed.length > 0) {
         for (const sink of toSeed) {
-          store.markSynced(user.title, rawItem.guid, sink.name, rawItem.title, true);
+          store.markSynced(userReport.title, rawItem.guid, sink.name, rawItem.title, true);
         }
         seeded++;
       }
@@ -176,13 +178,16 @@ export async function runSync(
 
       for (const sink of toPush) {
         try {
-          const result = await sink.push(item, { plexId: user.id, title: user.title });
+          const result = await sink.push(item, {
+            plexId: userReport.plexId ?? undefined,
+            title: userReport.title,
+          });
           if (result !== "skipped") {
-            store.markSynced(user.title, item.guid, sink.name, item.title);
+            store.markSynced(userReport.title, item.guid, sink.name, item.title);
           }
           if (result === "added") {
             userReport.added.push({ title: item.title, sink: sink.name });
-            log.info(`${sink.name}: added "${item.title}" (from ${user.title})`);
+            log.info(`${sink.name}: added "${item.title}" (from ${userReport.title})`);
           }
         } catch (err) {
           log.error((err as Error).message);
@@ -191,10 +196,145 @@ export async function runSync(
     }
     userReport.seeded = seeded;
     if (seeded > 0) {
-      log.info(`"${user.title}": seeded ${seeded} item(s) as already synced`);
+      log.info(`"${userReport.title}": seeded ${seeded} item(s) as already synced`);
     }
+    store.markSeen(userReport.title);
+    fetchedWatchlists.push({
+      title: userReport.title,
+      guids: new Set(items.map((i) => i.guid)),
+    });
+  }
+
+  const users = await listHomeUsers(config.plex.token);
+  log.info(`found ${users.length} Plex Home profile(s)`);
+
+  for (const user of users) {
+    await processUser(
+      {
+        plexId: user.id,
+        title: user.title,
+        admin: user.admin,
+        managed: user.restricted,
+        guest: user.guest,
+        friend: false,
+        protected: user.protected,
+        excluded:
+          config.plex.excludeUsers.includes(user.title) ||
+          (user.admin && !config.sync.includeOwner),
+        items: null,
+        seeded: 0,
+        added: [],
+        removed: [],
+      },
+      () => fetchWatchlistAs(config, store, user),
+    );
+  }
+
+  if (config.sync.friends) {
+    try {
+      // Home members can also appear as friends, under their account
+      // username rather than their profile title — match on both.
+      const homeNames = new Set(
+        users.flatMap((u) => [u.title.toLowerCase(), u.username.toLowerCase()]).filter(Boolean),
+      );
+      const friends = (await listFriends(config.plex.token)).filter(
+        (f) => !homeNames.has(f.username.toLowerCase()),
+      );
+      if (friends.length > 0) log.info(`found ${friends.length} friend(s) outside the Home`);
+      for (const friend of friends) {
+        await processUser(
+          {
+            plexId: null,
+            title: friend.username,
+            admin: false,
+            managed: false,
+            guest: false,
+            friend: true,
+            protected: false,
+            excluded: config.plex.excludeUsers.includes(friend.username),
+            items: null,
+            seeded: 0,
+            added: [],
+            removed: [],
+          },
+          async () => ({
+            token: config.plex.token,
+            items: await fetchFriendWatchlist(config.plex.token, friend),
+          }),
+        );
+      }
+    } catch (err) {
+      log.warn(`cannot list friends: ${(err as Error).message}`);
+    }
+  }
+
+  if (config.sync.removal && !opts.seed) {
+    await removalPass(config, store, sinks, report, fetchedWatchlists);
   }
 
   report.durationMs = Date.now() - startedAt.getTime();
   return report;
+}
+
+/**
+ * Undo pass: items that vanished from a user's watchlist lose their synced
+ * rows (so re-adding pushes again), and once no user references an item at
+ * all, sinks that Wisharr actually pushed to (never seeded backlog) get a
+ * remove call — delete the Overseerr request, unmonitor in Radarr/Sonarr.
+ * Only runs over watchlists fetched successfully this cycle, so a transient
+ * fetch failure can never masquerade as a mass removal.
+ */
+async function removalPass(
+  config: Config,
+  store: Store,
+  sinks: Sink[],
+  report: CycleReport,
+  fetchedWatchlists: { title: string; guids: Set<string> }[],
+): Promise<void> {
+  for (const { title: userTitle, guids: current } of fetchedWatchlists) {
+    const gone = store.rowsForUser(userTitle).filter((row) => !current.has(row.guid));
+    if (gone.length === 0) continue;
+
+    const userReport = report.users.find((u) => u.title === userTitle);
+    const byGuid = new Map<string, typeof gone>();
+    for (const row of gone) {
+      byGuid.set(row.guid, [...(byGuid.get(row.guid) ?? []), row]);
+    }
+
+    for (const [guid, rows] of byGuid) {
+      store.deleteSynced(userTitle, guid);
+      log.info(`"${rows[0]!.title}" left ${userTitle}'s watchlist`);
+      if (store.guidStillTracked(guid)) continue; // still on someone else's list
+
+      const pushedSinks = new Set(rows.filter((r) => !r.seeded).map((r) => r.sink));
+      if (pushedSinks.size === 0) continue; // Wisharr never added it anywhere
+
+      const [, type, ratingKey] = guid.match(/^plex:\/\/(movie|show)\/(.+)$/) ?? [];
+      if (!type || !ratingKey) continue;
+      let item: WatchlistItem = {
+        guid,
+        ratingKey,
+        type: type as "movie" | "show",
+        title: rows[0]!.title,
+      };
+      try {
+        item = await resolveExternalIds(config.plex.token, item);
+      } catch (err) {
+        log.warn(`removal: cannot resolve IDs for "${item.title}": ${(err as Error).message}`);
+      }
+
+      for (const sink of sinks) {
+        if (!pushedSinks.has(sink.name) || !sink.remove) continue;
+        try {
+          const result = await sink.remove(item);
+          if (result === "removed") {
+            userReport?.removed.push({ title: item.title, sink: sink.name });
+            log.info(`${sink.name}: removed "${item.title}" (no watchlist references it anymore)`);
+          }
+        } catch (err) {
+          log.error(`removal failed in ${sink.name} for "${item.title}": ${(err as Error).message}`);
+        }
+      }
+    }
+  }
 }

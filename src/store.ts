@@ -32,7 +32,38 @@ export class Store {
         minted_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS seen_users (
+        title         TEXT PRIMARY KEY,
+        first_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
     this.migrate();
+  }
+
+  /** True once a user's watchlist has been fully processed at least once. */
+  isSeen(title: string): boolean {
+    return this.db.prepare("SELECT 1 FROM seen_users WHERE title = ?").get(title) !== undefined;
+  }
+
+  markSeen(title: string): void {
+    this.db.prepare("INSERT OR IGNORE INTO seen_users (title) VALUES (?)").run(title);
+  }
+
+  rowsForUser(title: string): { guid: string; sink: string; title: string; seeded: boolean }[] {
+    const rows = this.db
+      .prepare("SELECT guid, sink, title, seeded FROM synced WHERE user_title = ?")
+      .all(title) as { guid: string; sink: string; title: string; seeded: number }[];
+    return rows.map((r) => ({ ...r, seeded: r.seeded === 1 }));
+  }
+
+  deleteSynced(user: string, guid: string): void {
+    this.db.prepare("DELETE FROM synced WHERE user_title = ? AND guid = ?").run(user, guid);
+  }
+
+  /** True if any user (any sink) still references this item. */
+  guidStillTracked(guid: string): boolean {
+    return this.db.prepare("SELECT 1 FROM synced WHERE guid = ? LIMIT 1").get(guid) !== undefined;
   }
 
   /** Rows written before the column existed are assumed to be seeds. */

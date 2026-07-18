@@ -62,7 +62,15 @@ export function Users({ onToast }: { onToast: (msg: string, err?: boolean) => vo
                   </td>
                   <td>
                     <Chip tone={u.admin ? "accent" : "muted"}>
-                      {u.admin ? "admin" : u.managed ? "managed" : u.guest ? "guest" : "home"}
+                      {u.admin
+                        ? "admin"
+                        : u.managed
+                          ? "managed"
+                          : u.friend
+                            ? "friend"
+                            : u.guest
+                              ? "guest"
+                              : "home"}
                     </Chip>
                   </td>
                   <td>{u.error ? <Chip tone="err">error</Chip> : (u.items ?? "—")}</td>
@@ -76,7 +84,11 @@ export function Users({ onToast }: { onToast: (msg: string, err?: boolean) => vo
                     )}
                   </td>
                   <td>
-                    <Chip tone={u.tokenCached === "none" ? "muted" : "ok"}>{u.tokenCached}</Chip>
+                    {u.friend ? (
+                      <Chip tone="muted">community API</Chip>
+                    ) : (
+                      <Chip tone={u.tokenCached === "none" ? "muted" : "ok"}>{u.tokenCached}</Chip>
+                    )}
                   </td>
                   <td>
                     <Switch
