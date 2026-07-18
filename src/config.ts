@@ -29,8 +29,12 @@ const overseerrSchema = z.object({
 
 export const configSchema = z.object({
   plex: z.object({
-    /** Admin account token — the only long-lived secret Wisharr needs. */
-    token: z.string().min(1),
+    /**
+     * Admin account token — the only long-lived secret Wisharr needs.
+     * Optional: when empty, Wisharr tries to auto-detect it from a local
+     * Plex Media Server install (see plex/token-discovery.ts).
+     */
+    token: z.string().default(""),
     /** Managed-user PINs by profile title, for protected Home profiles. */
     pins: z.record(z.string()).default({}),
     /** Home profile titles to skip entirely. */

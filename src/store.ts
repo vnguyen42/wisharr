@@ -24,6 +24,35 @@ export class Store {
         PRIMARY KEY (user_title, guid, sink)
       )
     `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tokens (
+        user_id   INTEGER PRIMARY KEY,
+        title     TEXT NOT NULL,
+        token     TEXT NOT NULL,
+        minted_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+  }
+
+  getToken(userId: number): string | undefined {
+    const row = this.db.prepare("SELECT token FROM tokens WHERE user_id = ?").get(userId) as
+      | { token: string }
+      | undefined;
+    return row?.token;
+  }
+
+  saveToken(userId: number, title: string, token: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO tokens (user_id, title, token) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET title = excluded.title, token = excluded.token,
+                                            minted_at = datetime('now')`,
+      )
+      .run(userId, title, token);
+  }
+
+  deleteToken(userId: number): void {
+    this.db.prepare("DELETE FROM tokens WHERE user_id = ?").run(userId);
   }
 
   isSynced(user: string, guid: string, sink: string): boolean {

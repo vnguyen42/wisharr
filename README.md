@@ -10,7 +10,7 @@ Every existing bridge breaks on the same wall: Plex doesn't give third-party app
 - **Watchlistarr** covers friends with the owner token, but is dormant and doesn't handle Home managed users.
 - **Radarr/Sonarr** native import lists only see your own account.
 
-Wisharr uses the same API Plex's own clients use to switch profiles: `POST plex.tv/api/home/users/{id}/switch` with your admin token returns a fresh token scoped to the managed user. Tokens are re-minted **every sync cycle**, so nothing ever expires. Your admin token is the only secret, and it stays alive as long as you use Plex normally.
+Wisharr uses the same API Plex's own clients use to switch profiles: `POST plex.tv/api/home/users/{id}/switch` with your admin token returns a fresh token scoped to the managed user. Minted tokens are cached and **automatically re-minted the moment plex.tv rejects one** — nothing ever expires from the user's point of view, and nothing ever needs manual refreshing. Your admin token is the only real secret, and it stays alive as long as you use Plex normally.
 
 ## Quick start
 
@@ -18,9 +18,14 @@ Wisharr uses the same API Plex's own clients use to switch profiles: `POST plex.
 cp config/config.example.yml config/config.yml
 # edit config.yml, or export PLEX_TOKEN / OVERSEERR_API_KEY
 npm install
+npm run seed        # first run: mark the existing backlog as synced (recommended)
 npm run sync        # one-shot
 npm run dev         # scheduled loop (default: every 20 min)
 ```
+
+**Plex token auto-detection** — if Wisharr runs on the same machine as your Plex Media Server, you can leave `plex.token` empty: it is auto-detected from the local install (macOS preferences, `Preferences.xml` on Linux/Docker, Windows registry) and validated against plex.tv before use. If detection fails, Wisharr tells you and falls back to the configured token.
+
+**Seeding** — on a fresh install, `npm run seed` marks every item currently on the watchlists as already synced, without pushing anything. Only items added *from then on* generate requests — no 200-request blast into Overseerr on day one.
 
 Or with Docker:
 

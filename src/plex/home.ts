@@ -26,8 +26,8 @@ export async function listHomeUsers(adminToken: string): Promise<HomeUser[]> {
 /**
  * Mint a fresh plex.tv token scoped to a managed user, derived from the admin
  * token — the same call Plex's own clients make when switching profiles
- * (POST /api/home/users/{id}/switch). Tokens are re-minted every sync cycle,
- * so nothing user-scoped ever needs to be stored or refreshed manually.
+ * (POST /api/home/users/{id}/switch). Callers should cache the result and
+ * only re-mint on 401/403: plex.tv rate-limits this endpoint (429).
  */
 export async function switchToHomeUser(
   adminToken: string,
