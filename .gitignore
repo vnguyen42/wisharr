@@ -2,6 +2,7 @@ node_modules/
 dist/
 data/
 config/config.yml
+docker-compose.yml
 *.log
 .env
 .DS_Store
