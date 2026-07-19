@@ -28,12 +28,17 @@ async function fetchWatchlistAs(
   config: Config,
   store: Store,
   user: HomeUser,
+  mintState: { count: number },
 ): Promise<{ token: string; items: Awaited<ReturnType<typeof fetchWatchlist>> }> {
   if (user.admin) {
     return { token: config.plex.token, items: await fetchWatchlist(config.plex.token) };
   }
 
   const mint = async () => {
+    // plex.tv rate-limits the switch endpoint: on a fresh install a large
+    // Home mints every token in one cycle, so space the calls out.
+    if (mintState.count > 0) await new Promise((r) => setTimeout(r, 2_000));
+    mintState.count++;
     const token = await switchToHomeUser(config.plex.token, user, config.plex.pins[user.title]);
     store.saveToken(user.id, user.title, token);
     return token;
@@ -216,6 +221,7 @@ export async function runSync(
   const users = await listHomeUsers(config.plex.token);
   log.info(`found ${users.length} Plex Home profile(s)`);
 
+  const mintState = { count: 0 };
   for (const user of users) {
     await processUser(
       {
@@ -234,7 +240,7 @@ export async function runSync(
         added: [],
         removed: [],
       },
-      () => fetchWatchlistAs(config, store, user),
+      () => fetchWatchlistAs(config, store, user, mintState),
     );
   }
 

@@ -17,7 +17,7 @@ import { OverseerrSink } from "../sinks/overseerr.js";
 import { configUpdateSchema, updateConfigFile } from "./config-write.js";
 import type { SyncManager } from "./manager.js";
 
-export const VERSION = "0.5.1";
+export const VERSION = "0.6.0";
 
 const SINK_SCHEMAS = {
   overseerr: overseerrSchema,
@@ -186,6 +186,7 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
               apiKeySet: true,
               qualityProfileId: config.sinks.sonarr.qualityProfileId,
               rootFolderPath: config.sinks.sonarr.rootFolderPath,
+              seasonMonitoring: config.sinks.sonarr.seasonMonitoring,
             }
           : null,
       },

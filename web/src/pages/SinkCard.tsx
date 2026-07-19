@@ -9,6 +9,17 @@ const HINTS: Record<string, string> = {
   sonarr: "Adds series directly",
 };
 
+const SEASON_MONITORING = [
+  "all",
+  "future",
+  "missing",
+  "existing",
+  "pilot",
+  "firstSeason",
+  "latestSeason",
+  "none",
+] as const;
+
 /**
  * One configurable sink: URL + API key, a connection test (which also loads
  * quality profiles and root folders for Radarr/Sonarr), then Save.
@@ -30,6 +41,7 @@ export function SinkCard({
   const [apiKey, setApiKey] = useState("");
   const [profileId, setProfileId] = useState<number | undefined>(config?.qualityProfileId);
   const [rootFolder, setRootFolder] = useState<string | undefined>(config?.rootFolderPath);
+  const [monitoring, setMonitoring] = useState(config?.seasonMonitoring ?? "all");
   const [test, setTest] = useState<SinkTestResult | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -65,6 +77,7 @@ export function SinkCard({
       if (isArr) {
         fields.qualityProfileId = profileId;
         fields.rootFolderPath = rootFolder;
+        if (name === "sonarr") fields.seasonMonitoring = monitoring;
       }
       await api("/api/config", { method: "PUT", body: JSON.stringify({ sinks: { [name]: fields } }) });
       onToast(`${label} saved`);
@@ -159,6 +172,20 @@ export function SinkCard({
                 </option>
               ))}
             </select>
+            {name === "sonarr" && (
+              <select
+                className="input"
+                value={monitoring}
+                aria-label="Season monitoring"
+                onChange={(e) => setMonitoring(e.target.value)}
+              >
+                {SEASON_MONITORING.map((m) => (
+                  <option key={m} value={m}>
+                    monitor: {m}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
         <div className="sink-line">

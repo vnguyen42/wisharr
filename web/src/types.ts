@@ -59,6 +59,7 @@ export interface SinkConfig {
   apiKeySet: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;
+  seasonMonitoring?: string;
 }
 
 export interface ApiConfig {

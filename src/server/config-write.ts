@@ -7,6 +7,9 @@ const sinkFieldsSchema = z.object({
   apiKey: z.string().min(1).optional(),
   qualityProfileId: z.number().int().positive().optional(),
   rootFolderPath: z.string().min(1).optional(),
+  seasonMonitoring: z
+    .enum(["all", "future", "missing", "existing", "pilot", "firstSeason", "latestSeason", "none"])
+    .optional(),
 });
 
 /** The subset of the config the web UI is allowed to change. */

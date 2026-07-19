@@ -20,6 +20,10 @@ export const sonarrSchema = z.object({
   monitor: z.boolean().default(true),
   searchOnAdd: z.boolean().default(true),
   seasonFolder: z.boolean().default(true),
+  /** Which episodes Sonarr monitors on a newly added series. */
+  seasonMonitoring: z
+    .enum(["all", "future", "missing", "existing", "pilot", "firstSeason", "latestSeason", "none"])
+    .default("all"),
 });
 
 export const overseerrSchema = z.object({

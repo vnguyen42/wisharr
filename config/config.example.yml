@@ -65,6 +65,8 @@ sinks:
   #   monitor: true
   #   searchOnAdd: true
   #   seasonFolder: true
+  #   # all | future | missing | existing | pilot | firstSeason | latestSeason | none
+  #   seasonMonitoring: all
 
 database: data/wisharr.db
 

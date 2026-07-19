@@ -15,16 +15,17 @@ export class SonarrSink implements Sink {
       return "skipped";
     }
 
+    const monitoring = this.cfg.monitor ? this.cfg.seasonMonitoring : "none";
     const res = await this.api("POST", "/api/v3/series", {
       tvdbId: item.tvdbId,
       title: item.title,
       qualityProfileId: this.cfg.qualityProfileId,
       rootFolderPath: this.cfg.rootFolderPath,
-      monitored: this.cfg.monitor,
+      monitored: monitoring !== "none",
       seasonFolder: this.cfg.seasonFolder,
       addOptions: {
-        searchForMissingEpisodes: this.cfg.searchOnAdd,
-        monitor: this.cfg.monitor ? "all" : "none",
+        searchForMissingEpisodes: this.cfg.searchOnAdd && monitoring !== "none",
+        monitor: monitoring,
       },
       tags: [],
     });

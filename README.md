@@ -2,7 +2,17 @@
 
 [![CI](https://github.com/vnguyen42/wisharr/actions/workflows/ci.yml/badge.svg)](https://github.com/vnguyen42/wisharr/actions/workflows/ci.yml)
 
-Sync Plex watchlists to **Overseerr/Jellyseerr, Radarr and Sonarr** — including **Plex Home managed users**, with a **single admin token** and zero token copy-pasting, ever.
+Sync Plex watchlists to **Overseerr/Jellyseerr, Radarr and Sonarr** — including **Plex Home managed users** and **friends**, with a **single admin token** and zero token copy-pasting, ever.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+<details>
+<summary>More screenshots — Users & Settings</summary>
+
+![Users](docs/screenshots/users.png)
+![Settings](docs/screenshots/settings.png)
+
+</details>
 
 ## Why another watchlist tool?
 
