@@ -11,7 +11,8 @@ plex:
   # Otherwise, how to find it: https://support.plex.tv/articles/204059436
   token: ${PLEX_TOKEN}
 
-  # PINs for protected Home profiles (profile title -> PIN). Omit if none.
+  # PINs for protected Home profiles (profile title -> PIN). Rarely needed:
+  # the admin token bypasses managed-profile PINs. Kept as an escape hatch.
   pins: {}
   #  Kids: "1234"
 
