@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/vnguyen42/wisharr/actions/workflows/ci.yml/badge.svg)](https://github.com/vnguyen42/wisharr/actions/workflows/ci.yml)
 
-Sync Plex watchlists to **Overseerr/Jellyseerr, Radarr and Sonarr** — including **Plex Home managed users** and **friends**, with a **single admin token** and zero token copy-pasting, ever.
+Sync Plex watchlists to **Seerr (Overseerr/Jellyseerr), Radarr and Sonarr** — including **Plex Home managed users** and **friends**, with a **single admin token** and zero token copy-pasting, ever.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -63,7 +63,7 @@ npm run dev         # scheduled loop + web UI (default: every 20 min)
 
 **Request attribution** — Overseerr requests are credited to the right person: Wisharr matches each Plex Home profile against Overseerr's user list (by Plex account id first, display name as fallback), so request history shows who wanted what. Plex users with no Overseerr account — managed users typically, or friends never imported — fall back to the API key owner, with a one-time log line naming them.
 
-> **Known limitation** — requests created through the Overseerr API key are always auto-approved, regardless of the target user's permissions (verified against Overseerr 1.33.x). If you rely on Overseerr's approval workflow, be aware that watchlist-driven requests bypass it. Jellyseerr (a fork) behaves identically and is fully compatible with Wisharr — same duplicate handling, same user matching fields.
+> **Known limitation** — requests created through the Overseerr API key are always auto-approved, regardless of the target user's permissions (verified against Overseerr 1.33.x). If you rely on Overseerr's approval workflow, be aware that watchlist-driven requests bypass it. Jellyseerr (a fork) behaves identically and is fully compatible with Wisharr — same duplicate handling, same user matching fields. [Seerr](https://github.com/seerr-team/seerr), the merged successor of both, is supported through the same `overseerr` sink (verified against Seerr 3.5.0).
 
 ## Web UI
 

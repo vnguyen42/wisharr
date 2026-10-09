@@ -46,6 +46,9 @@ export class OverseerrSink implements Sink {
       }),
     });
 
+    // 202 "No seasons available to request": every season of the show is
+    // already requested or available, so nothing new was created.
+    if (res.status === 202) return "already-present";
     if (res.ok) return "added";
 
     const body = await res.text();
