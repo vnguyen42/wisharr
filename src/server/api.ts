@@ -17,7 +17,7 @@ import { OverseerrSink } from "../sinks/overseerr.js";
 import { configUpdateSchema, updateConfigFile } from "./config-write.js";
 import type { SyncManager } from "./manager.js";
 
-export const VERSION = "0.6.0";
+export const VERSION = "0.7.0";
 
 const SINK_SCHEMAS = {
   overseerr: overseerrSchema,
