@@ -2,12 +2,12 @@
 
 [![CI](https://github.com/vnguyen42/wisharr/actions/workflows/ci.yml/badge.svg)](https://github.com/vnguyen42/wisharr/actions/workflows/ci.yml)
 
-Sync Plex watchlists to **Seerr (Overseerr/Jellyseerr), Radarr and Sonarr** — including **Plex Home managed users** and **friends**, with a **single admin token** and zero token copy-pasting, ever.
+Sync Plex watchlists to **Seerr, Radarr and Sonarr**, including **Plex Home managed users** and **friends**, with a **single admin token**. Nobody else has to log in or hand over a token.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
 <details>
-<summary>More screenshots — Users & Settings</summary>
+<summary>More screenshots: Users and Settings</summary>
 
 ![Users](docs/screenshots/users.png)
 ![Settings](docs/screenshots/settings.png)
@@ -16,13 +16,28 @@ Sync Plex watchlists to **Seerr (Overseerr/Jellyseerr), Radarr and Sonarr** — 
 
 ## Why another watchlist tool?
 
-Every existing bridge breaks on the same wall: Plex doesn't give third-party apps refresh tokens, and per-user tokens expire silently.
+Most watchlist bridges need a Plex token for every user. Plex Home managed users have no plex.tv login, so their watchlists are usually left out.
 
-- **Overseerr/Jellyseerr** built-in sync needs each user to re-login periodically — and Plex Home **managed users can't log in at all** (they have no plex.tv credentials), so their watchlists are simply invisible.
-- **Watchlistarr** covers friends with the owner token, but is dormant and doesn't handle Home managed users.
-- **Radarr/Sonarr** native import lists only see your own account.
+| As of October 2026 | Managed users | Friends | Per-user login | Sends to |
+|---|---|---|---|---|
+| Seerr built-in sync | No | Only users who signed in to Seerr | Yes, once | Seerr |
+| [Pulsarr](https://github.com/jamcalli/Pulsarr) | No | Yes, admin token | No | Radarr, Sonarr |
+| [Watchlistarr](https://github.com/nylonee/watchlistarr) (no release since 2024) | No | Yes, admin token | No | Radarr, Sonarr |
+| Radarr/Sonarr import lists | No | Friends RSS feed, every 6 h, no attribution | No | Radarr, Sonarr |
+| **Wisharr** | **Yes** | **Yes, admin token** | **No** | **Seerr, Radarr, Sonarr** |
 
-Wisharr uses the same API Plex's own clients use to switch profiles: `POST plex.tv/api/home/users/{id}/switch` with your admin token returns a fresh token scoped to the managed user. Minted tokens are cached and **automatically re-minted the moment plex.tv rejects one** — nothing ever expires from the user's point of view, and nothing ever needs manual refreshing. Your admin token is the only real secret, and it stays alive as long as you use Plex normally.
+If you don't need managed users or Seerr, Pulsarr has many more features (routing rules, approvals, notifications).
+
+## How it works
+
+Plex apps switch profiles with `POST plex.tv/api/home/users/{id}/switch`. Wisharr makes the same call with your admin token to get a token for each managed profile, and gets a new one when plex.tv rejects it. Friends' watchlists come from Plex's GraphQL API, also with the admin token only.
+
+New watchlist items become Seerr requests credited to the matching Seerr user, or direct Radarr/Sonarr adds. A local SQLite database remembers what was already sent.
+
+- **Near real-time with Plex Pass:** your watchlist and your friends' watchlist RSS feeds are checked every 60 seconds. Everything else is picked up by the regular sync, every 20 minutes by default.
+- **No request flood on first run:** existing watchlists are recorded but not requested. Only items added afterwards are sent (`sync.seedOnFirstRun`).
+- **Removal sync (opt-in):** when an item leaves every watchlist, Wisharr deletes its Seerr request or unmonitors it in Radarr/Sonarr. It only touches items it added and never deletes files (`sync.removal`).
+- **Web UI on port 9797:** dashboard, users, live logs and settings.
 
 ## Quick start (Docker)
 
@@ -30,51 +45,29 @@ Wisharr uses the same API Plex's own clients use to switch profiles: `POST plex.
 mkdir wisharr && cd wisharr
 curl -LO https://raw.githubusercontent.com/vnguyen42/wisharr/main/docker-compose.example.yml
 curl -Lo config/config.yml --create-dirs https://raw.githubusercontent.com/vnguyen42/wisharr/main/config/config.example.yml
-# put PLEX_TOKEN / OVERSEERR_API_KEY in a .env file, or edit config/config.yml
+# Put PLEX_TOKEN and OVERSEERR_API_KEY (your Seerr API key) in a .env file
 docker compose -f docker-compose.example.yml up -d
 ```
 
-Multi-arch images (amd64 + arm64) are published to `ghcr.io/vnguyen42/wisharr` on every push to main and every release tag. Open **http://localhost:9797** — sinks, sync interval and per-user toggles are all configurable from the web UI.
+Then open http://localhost:9797. Images are multi-arch (amd64, arm64) on `ghcr.io/vnguyen42/wisharr`.
 
-From source instead:
+All options are documented in [`config/config.example.yml`](config/config.example.yml). `${VAR}` references are read from environment variables. If Wisharr runs on the same machine as Plex Media Server, `plex.token` can stay empty: it is read from the local Plex install.
+
+<details>
+<summary>Run from source</summary>
 
 ```bash
 cp config/config.example.yml config/config.yml
 npm install && npm install --prefix web && npm run --prefix web build
-npm run sync        # one-shot
-npm run dev         # scheduled loop + web UI (default: every 20 min)
+npm run sync   # one sync
+npm run dev    # scheduled sync and web UI
 ```
 
-**Plex token auto-detection** — if Wisharr runs on the same machine as your Plex Media Server, you can leave `plex.token` empty: it is auto-detected from the local install (macOS preferences, `Preferences.xml` on Linux/Docker, Windows registry) and validated against plex.tv before use. If detection fails, Wisharr tells you and falls back to the configured token.
+</details>
 
-**First-run behavior** — by default (`sync.seedOnFirstRun: true`), the first time a sink is ever synced — fresh install, or a sink you add to the config months later — Wisharr absorbs the existing watchlist backlog silently: items already on the lists are marked as synced without being requested. Only items added *from then on* generate requests — no 200-request blast into Overseerr on day one. Prefer the opposite? Set `seedOnFirstRun: false` and the whole backlog is pushed on the first sync. `npm run seed` is also available to force-absorb the current state at any time.
+## Security
 
-## How it works
-
-1. `GET plex.tv/api/home/users` — enumerate every profile in your Plex Home (admin token).
-2. For each managed profile, `POST .../switch` mints a fresh user-scoped token. PIN-protected profiles work out of the box — the admin token bypasses profile PINs, so `plex.pins` in the config is rarely needed.
-3. `GET discover.provider.plex.tv/library/sections/watchlist/all` — fetch that user's watchlist; external IDs (TMDB/TVDB/IMDB) resolved per item.
-4. **Friends outside the Home** are covered too (`sync.friends`): their watchlists come from the Plex community GraphQL API using only your admin token — their watchlist visibility must allow friends.
-5. Push to your configured sinks — Overseerr/Jellyseerr requests, or direct Radarr/Sonarr adds. A local SQLite store dedups so items are only pushed once per user per sink.
-
-**Near real-time** — with a Plex Pass, Wisharr generates the watchlist RSS feeds and polls them every `sync.rssIntervalSeconds` (60s default). New activity triggers a full sync cycle immediately instead of waiting for the next poll. Without Plex Pass this is skipped silently and the regular interval applies.
-
-**Removal sync** (`sync.removal`, opt-in) — when an item disappears from every watchlist, Wisharr undoes what it did: the Overseerr request is deleted and the item is unmonitored in Radarr/Sonarr. Only items Wisharr itself pushed are touched — pre-existing backlog is never removed, and files are never deleted. Re-adding the item to a watchlist requests it again.
-
-**Request attribution** — Overseerr requests are credited to the right person: Wisharr matches each Plex Home profile against Overseerr's user list (by Plex account id first, display name as fallback), so request history shows who wanted what. Plex users with no Overseerr account — managed users typically, or friends never imported — fall back to the API key owner, with a one-time log line naming them.
-
-> **Known limitation** — requests created through the Overseerr API key are always auto-approved, regardless of the target user's permissions (verified against Overseerr 1.33.x). If you rely on Overseerr's approval workflow, be aware that watchlist-driven requests bypass it. Jellyseerr (a fork) behaves identically and is fully compatible with Wisharr — same duplicate handling, same user matching fields. [Seerr](https://github.com/seerr-team/seerr), the merged successor of both, is supported through the same `overseerr` sink (verified against Seerr 3.5.0).
-
-## Web UI
-
-Wisharr ships a built-in web UI on port **9797** (set `ui.port`, or `ui.enabled: false` to turn it off):
-
-- **Dashboard** — sink health, tracked items, request counts, recent activity, next-sync countdown and a Sync-now button.
-- **Users** — every Plex Home profile with its type, watchlist size, Seerr account mapping, token state, and a per-profile sync toggle.
-- **Logs** — live log tail over SSE with level filters.
-- **Settings** — sync interval and behavior toggles (saved back to `config.yml`, comments preserved), plus connection tests for Plex and every sink. The Seerr sink keeps the `sinks.overseerr` config key, so existing configs keep working.
-
-Authentication is off by default — either keep the port LAN-only, or enable HTTP Basic auth:
+The web UI has no login by default, and its API can read your Plex admin token and your Seerr/Radarr/Sonarr API keys. Keep port 9797 on your local network, or turn on basic auth:
 
 ```yaml
 ui:
@@ -83,21 +76,15 @@ ui:
     password: ${WISHARR_PASSWORD}
 ```
 
-Two more notes for anything beyond a trusted LAN: bind the port locally (`127.0.0.1:9797`) or put a reverse proxy with auth in front — the API holds your Plex admin token and sink API keys. And treat the `data/` volume (backups included) as sensitive: it caches live plex.tv tokens for your Home profiles.
+The `data/` folder stores Plex tokens for your Home profiles. Protect it and its backups like a password.
 
-One caveat for self-hosters: keep a single Wisharr process per database file. In particular, don't run a host-side `npm run sync` against the same `data/` a Docker container is using — SQLite locking is not reliable across the Docker Desktop file-sharing boundary.
+## Limitations
 
-## Configuration
+- Seerr auto-approves requests made with its API key, so watchlist requests skip Seerr's approval workflow (tested on Overseerr 1.33).
+- Users without a Seerr account (usually managed users) get their requests credited to the API key owner.
+- Run one Wisharr per database file.
 
-See [`config/config.example.yml`](config/config.example.yml). `${VAR}` references in the YAML are expanded from environment variables so secrets can stay out of the file.
-
-## Roadmap
-
-- [ ] Friends' watchlists via the Plex community GraphQL API (owner token only, "Friends Only" visibility)
-- [ ] Plex Pass RSS feeds as a near-real-time trigger between polls
-- [ ] Removal sync (item left the watchlist → optional unmonitor)
-- [ ] Minimal web UI for config & status
-- [ ] Multi-arch Docker images (amd64/arm64) published on release
+Overseerr and Jellyseerr use the same API as Seerr and work too.
 
 ## License
 
