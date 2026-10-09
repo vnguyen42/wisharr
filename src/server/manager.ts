@@ -5,6 +5,8 @@ import type { Sink } from "../sinks/sink.js";
 import type { Store } from "../store.js";
 import { buildSinks, type CycleReport, runSync } from "../sync.js";
 
+const RSS_RETRY_MS = 5 * 60_000;
+
 /** Owns the sync loop and its observable state, for both the CLI and the web UI. */
 export class SyncManager {
   running = false;
@@ -38,7 +40,18 @@ export class SyncManager {
    */
   async startRss(): Promise<void> {
     if (!this.config.sync.rss) return;
-    const feeds = await ensureRssFeeds(this.config.plex.token, this.config.sync.friends);
+    const { feeds, transient } = await ensureRssFeeds(
+      this.config.plex.token,
+      this.config.sync.friends,
+    );
+    if (transient) {
+      // Typically the network isn't up yet right after a host reboot: don't
+      // mistake that for "no Plex Pass" and lose real-time sync until restart.
+      this.rssState = "unavailable";
+      log.warn(`real-time RSS setup failed, retrying in ${RSS_RETRY_MS / 60_000} min`);
+      this.rssTimer = setTimeout(() => void this.startRss(), RSS_RETRY_MS);
+      return;
+    }
     if (feeds.length === 0) {
       this.rssState = "unavailable";
       log.info("real-time RSS sync unavailable (Plex Pass required) — cron cycles only");

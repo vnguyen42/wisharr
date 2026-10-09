@@ -5,14 +5,16 @@ import { DISCOVER, plexHeaders } from "./client.js";
 /**
  * Ask plex.tv for the account's watchlist RSS feed URLs (Plex Pass feature).
  * The call is idempotent: it returns the existing feed when one was already
- * generated. Returns [] when the account has no Plex Pass.
+ * generated. `feeds` is empty when the account has no Plex Pass; `transient`
+ * flags a network error or a plex.tv 5xx/429, where retrying later can succeed.
  */
 export async function ensureRssFeeds(
   token: string,
   includeFriends: boolean,
-): Promise<{ feedType: string; url: string }[]> {
+): Promise<{ feeds: { feedType: string; url: string }[]; transient: boolean }> {
   const types = ["watchlist", ...(includeFriends ? ["friendsWatchlist"] : [])];
   const feeds: { feedType: string; url: string }[] = [];
+  let transient = false;
 
   for (const feedType of types) {
     try {
@@ -25,6 +27,11 @@ export async function ensureRssFeeds(
         },
         body: JSON.stringify({ feedType }),
       });
+      if (res.status >= 500 || res.status === 429) {
+        transient = true;
+        log.warn(`cannot generate ${feedType} RSS feed (HTTP ${res.status})`);
+        continue;
+      }
       if (!res.ok) {
         log.warn(`cannot generate ${feedType} RSS feed (HTTP ${res.status}) — Plex Pass required`);
         continue;
@@ -33,10 +40,11 @@ export async function ensureRssFeeds(
       const url = body.RSSInfo?.[0]?.url;
       if (url) feeds.push({ feedType, url });
     } catch (err) {
+      transient = true;
       log.warn(`cannot generate ${feedType} RSS feed: ${(err as Error).message}`);
     }
   }
-  return feeds;
+  return { feeds, transient };
 }
 
 /**
