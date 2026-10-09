@@ -1,5 +1,5 @@
 import { usePolling } from "../api";
-import { Card, Chip, Tile, timeAgo } from "../components";
+import { Card, Chip, Tile, sinkLabel, timeAgo } from "../components";
 import type { ActivityEntry, Status } from "../types";
 
 export function Dashboard({ status }: { status: Status | null }) {
@@ -77,7 +77,7 @@ export function Dashboard({ status }: { status: Status | null }) {
           <div className="stack">
             {status?.sinks.map((s) => (
               <div key={s.name}>
-                {s.name} <Chip tone="accent">configured</Chip>
+                {sinkLabel(s.name)} <Chip tone="accent">configured</Chip>
               </div>
             ))}
             <div className="cell-muted">Requests attributed per user when an account matches.</div>
@@ -93,7 +93,7 @@ export function Dashboard({ status }: { status: Status | null }) {
                 <time>{timeAgo(a.at)}</time>
                 <span className="what">
                   <b>{a.title}</b>
-                  {a.seeded ? " absorbed for " : ` requested in ${a.sink} for `}
+                  {a.seeded ? " absorbed for " : ` requested in ${sinkLabel(a.sink)} for `}
                   <b>{a.user}</b>
                   {a.seeded && <Chip tone="muted">seeded</Chip>}
                 </span>

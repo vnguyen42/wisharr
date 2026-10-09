@@ -70,9 +70,9 @@ npm run dev         # scheduled loop + web UI (default: every 20 min)
 Wisharr ships a built-in web UI on port **9797** (set `ui.port`, or `ui.enabled: false` to turn it off):
 
 - **Dashboard** — sink health, tracked items, request counts, recent activity, next-sync countdown and a Sync-now button.
-- **Users** — every Plex Home profile with its type, watchlist size, Overseerr account mapping, token state, and a per-profile sync toggle.
+- **Users** — every Plex Home profile with its type, watchlist size, Seerr account mapping, token state, and a per-profile sync toggle.
 - **Logs** — live log tail over SSE with level filters.
-- **Settings** — sync interval and behavior toggles (saved back to `config.yml`, comments preserved), plus connection tests for Plex and Overseerr.
+- **Settings** — sync interval and behavior toggles (saved back to `config.yml`, comments preserved), plus connection tests for Plex and every sink. The Seerr sink keeps the `sinks.overseerr` config key, so existing configs keep working.
 
 Authentication is off by default — either keep the port LAN-only, or enable HTTP Basic auth:
 

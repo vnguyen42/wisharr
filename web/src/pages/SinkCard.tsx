@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { api } from "../api";
-import { Chip } from "../components";
+import { Chip, sinkLabel } from "../components";
 import type { SinkConfig, SinkTestResult } from "../types";
 
 const HINTS: Record<string, string> = {
-  overseerr: "Requests with per-user attribution — recommended",
+  overseerr: "Seerr, Overseerr or Jellyseerr — per-user request attribution, recommended",
   radarr: "Adds movies directly",
   sonarr: "Adds series directly",
 };
@@ -45,7 +45,7 @@ export function SinkCard({
   const [test, setTest] = useState<SinkTestResult | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const label = name.charAt(0).toUpperCase() + name.slice(1);
+  const label = sinkLabel(name);
   // The test must pass before an *arr sink can be saved: its dropdown values
   // (profile, root folder) come from the test response.
   const canSave = Boolean(url) && (config?.apiKeySet || apiKey) && (!isArr || (test?.ok && profileId && rootFolder));

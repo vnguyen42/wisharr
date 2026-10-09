@@ -5,6 +5,7 @@ import type { PushResult, RemoveResult, Requester, Sink } from "./sink.js";
 
 export class SonarrSink implements Sink {
   readonly name = "sonarr";
+  readonly label = "Sonarr";
 
   constructor(private readonly cfg: SonarrConfig) {}
 

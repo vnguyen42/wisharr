@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
 
+const SINK_LABELS: Record<string, string> = { overseerr: "Seerr", radarr: "Radarr", sonarr: "Sonarr" };
+
+/** Product name for a sink key (the key itself stays `overseerr` in config and data). */
+export function sinkLabel(name: string): string {
+  return SINK_LABELS[name] ?? name;
+}
+
 export function Chip({
   tone,
   children,

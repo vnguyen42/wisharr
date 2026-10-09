@@ -16,7 +16,10 @@ export interface Requester {
 export type RemoveResult = "removed" | "skipped";
 
 export interface Sink {
+  /** Stable key: config section, store rows, API routes. Never change it. */
   readonly name: string;
+  /** Human-facing product name for logs and the web UI. */
+  readonly label: string;
   /** Push one watchlist item; must be idempotent. */
   push(item: WatchlistItem, requester: Requester): Promise<PushResult>;
   /**

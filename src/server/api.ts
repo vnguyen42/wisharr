@@ -308,7 +308,9 @@ export function buildApi(manager: SyncManager, rawConfiguredToken: string): Hono
         const res = await fetch(`${url}/api/v1/status`, { headers: { "X-Api-Key": apiKey } });
         if (!res.ok) return c.json({ ok: false, detail: `HTTP ${res.status}` });
         const { version } = (await res.json()) as { version: string };
-        return c.json({ ok: true, detail: `Overseerr v${version}` });
+        // Major version tells the products apart: Overseerr 1.x, Jellyseerr 2.x, Seerr 3.x+.
+        const product = Number(version.split(".")[0]) >= 3 ? "Seerr" : "Overseerr/Jellyseerr";
+        return c.json({ ok: true, detail: `${product} v${version}` });
       }
 
       const headers = { "X-Api-Key": apiKey };

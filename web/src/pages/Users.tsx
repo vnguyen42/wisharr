@@ -40,7 +40,7 @@ export function Users({ onToast }: { onToast: (msg: string, err?: boolean) => vo
                 <th>Profile</th>
                 <th>Type</th>
                 <th>Watchlist</th>
-                <th>Overseerr account</th>
+                <th>Seerr account</th>
                 <th>Token</th>
                 <th>Sync</th>
               </tr>

@@ -14,9 +14,13 @@ interface OverseerrUser {
 const USER_CACHE_TTL_MS = 10 * 60_000;
 const USER_CACHE_MIN_REFRESH_MS = 60_000;
 
-/** Requests items through the Overseerr/Jellyseerr API (POST /api/v1/request). */
+/**
+ * Requests items through the Seerr API (POST /api/v1/request). Seerr is the
+ * merged successor of Overseerr and Jellyseerr, which share the same API.
+ */
 export class OverseerrSink implements Sink {
   readonly name = "overseerr";
+  readonly label = "Seerr";
 
   /** plexId → Overseerr user id, plus a lowercased-name fallback index. */
   private byPlexId = new Map<number, number>();
@@ -28,7 +32,7 @@ export class OverseerrSink implements Sink {
 
   async push(item: WatchlistItem, requester: Requester): Promise<PushResult> {
     if (!item.tmdbId) {
-      log.warn(`overseerr: no tmdbId for "${item.title}", skipping`);
+      log.warn(`seerr: no tmdbId for "${item.title}", skipping`);
       return "skipped";
     }
 
@@ -56,7 +60,7 @@ export class OverseerrSink implements Sink {
     // when the media already exists or was already requested.
     if (res.status === 409 || body.includes("already exists")) return "already-present";
     throw new Error(
-      `overseerr request failed (${res.status}) for "${item.title}" [${requester.title}]: ${body}`,
+      `seerr request failed (${res.status}) for "${item.title}" [${requester.title}]: ${body}`,
     );
   }
 
@@ -71,7 +75,7 @@ export class OverseerrSink implements Sink {
         `${this.cfg.url}/api/v1/request?take=${pageSize}&skip=${skip}&sort=added`,
         { headers: { "X-Api-Key": this.cfg.apiKey } },
       );
-      if (!res.ok) throw new Error(`overseerr request list failed (${res.status})`);
+      if (!res.ok) throw new Error(`seerr request list failed (${res.status})`);
       const { results } = (await res.json()) as {
         results: { id: number; type: string; media?: { tmdbId?: number } }[];
       };
@@ -85,7 +89,7 @@ export class OverseerrSink implements Sink {
           headers: { "X-Api-Key": this.cfg.apiKey },
         });
         if (!del.ok && del.status !== 404) {
-          throw new Error(`overseerr request delete failed (${del.status})`);
+          throw new Error(`seerr request delete failed (${del.status})`);
         }
         return "removed";
       }
@@ -116,7 +120,7 @@ export class OverseerrSink implements Sink {
     if (id === undefined && !this.warnedUnknown.has(requester.title)) {
       this.warnedUnknown.add(requester.title);
       log.info(
-        `overseerr: no account matches Plex user "${requester.title}", ` +
+        `seerr: no account matches Plex user "${requester.title}", ` +
           `their requests will be attributed to the API key owner`,
       );
     }
@@ -154,7 +158,7 @@ export class OverseerrSink implements Sink {
     } catch (err) {
       // Attribution is best-effort: keep the previous (possibly empty) map and
       // let requests fall back to the admin rather than failing the push.
-      log.warn(`overseerr: cannot load user list (${(err as Error).message})`);
+      log.warn(`seerr: cannot load user list (${(err as Error).message})`);
       this.usersFetchedAt = now;
     }
   }

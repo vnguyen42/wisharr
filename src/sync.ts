@@ -200,7 +200,7 @@ export async function runSync(
           );
           if (result === "added") {
             userReport.added.push({ title: item.title, sink: sink.name });
-            log.info(`${sink.name}: added "${item.title}" (from ${userReport.title})`);
+            log.info(`${sink.label}: added "${item.title}" (from ${userReport.title})`);
           }
         } catch (err) {
           log.error((err as Error).message);
@@ -354,11 +354,11 @@ export async function removalPass(
           const result = await sink.remove(item);
           if (result === "removed") {
             userReport?.removed.push({ title: item.title, sink: sink.name });
-            log.info(`${sink.name}: removed "${item.title}" (no watchlist references it anymore)`);
+            log.info(`${sink.label}: removed "${item.title}" (no watchlist references it anymore)`);
           }
         } catch (err) {
           allSucceeded = false;
-          log.error(`removal failed in ${sink.name} for "${item.title}": ${(err as Error).message}`);
+          log.error(`removal failed in ${sink.label} for "${item.title}": ${(err as Error).message}`);
         }
       }
       if (allSucceeded) store.deleteSynced(userTitle, guid);

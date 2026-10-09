@@ -21,7 +21,7 @@ if (process.argv.includes("--seed")) {
   store.close();
 } else {
   log.info(
-    `wisharr started — syncing every ${config.sync.intervalMinutes} min to: ${manager.sinks.map((s) => s.name).join(", ")}`,
+    `wisharr started — syncing every ${config.sync.intervalMinutes} min to: ${manager.sinks.map((s) => s.label).join(", ")}`,
   );
   manager.schedule();
 

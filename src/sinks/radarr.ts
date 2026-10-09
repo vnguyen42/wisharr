@@ -5,6 +5,7 @@ import type { PushResult, RemoveResult, Requester, Sink } from "./sink.js";
 
 export class RadarrSink implements Sink {
   readonly name = "radarr";
+  readonly label = "Radarr";
 
   constructor(private readonly cfg: RadarrConfig) {}
 
